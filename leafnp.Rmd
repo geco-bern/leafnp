@@ -1,0 +1,124 @@
+---
+title: "Leaf N and P analysis"
+author: "Beni Stocker"
+date: "1/6/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(rbeni)
+library(ingestr)
+```
+
+## Read data
+
+```{r}
+df <- read_csv("~/data/leafNP_tiandi/Global_N_P_dataset_20210103_final.csv", col_types = "idddcccdddddccccccc") %>% 
+  rename(lon = Lon_Di_check_final, 
+         lat = Lat_Di_check_final, 
+         elv = Alt_Di_check_final) %>% 
+  
+  ## to be done: make sampling year info machine readable: either in the form of "9999" or "8888_9999"
+  separate(Sampling_Year, sep = "_", c("year_start", "year_end")) 
+  # rowwise() %>% 
+  # mutate(year_mid = mean(year_start, year_end, na.rm = TRUE))
+```
+
+## Identify sites
+
+Identify sites (unique lon, lat, elevation)
+```{r}
+df_sites <- df %>%
+  dplyr::select(lon, lat, elv) %>% 
+  distinct() %>% 
+  mutate(sitename = paste0("i", 1:n()))
+
+df <- df %>% 
+  left_join(df_sites, by = c("lon", "lat", "elv"))
+
+df_sites <- df_sites %>% 
+  left_join(df %>% dplyr::select(Record_ID, sitename, year_start, year_end),
+            by = "sitename") %>% 
+  group_by(lon, lat, elv, sitename) %>% 
+  summarise(year_start = min(year_start, na.rm = TRUE),
+            year_end   = max(year_end, na.rm = TRUE)) %>% 
+  rowwise() %>% 
+  mutate(year_end = ifelse(is.na(year_end), year_start, year_end)) %>% 
+  ungroup()
+```
+
+Sites on a global map
+```{r}
+plot_map_simpl() +
+  geom_point(data = df_sites, aes(x = lon, y = lat), color = "red", size = 0.3)
+```
+
+
+
+## Complement dataset
+
+*Look into:*
+
+- Complement dataset with data points where only Nmass or only Pmass is available (no strict requirement to have paired Nmass and Pmass for this analysis).
+- Information about species identity, family, genus
+
+
+### Soil
+
+Read HWSD for each site.
+
+```{r eval=FALSE}
+df_hwsd <- ingest(
+  df_sites,
+  source = "hwsd",
+  settings = list(fil = "~/data/hwsd/HWSD_RASTER/hwsd.bil")
+  )
+
+## for some it got info for multiple soil types - take only first ones => TEST INFLUENCE OF THIS
+df_hwsd <- df_hwsd %>% 
+  mutate(n_row = purrr::map_int(data, ~nrow(.))) %>% 
+  mutate(data = purrr::map(data, ~slice(., 1)))
+
+save(df_hwsd, file = "data/df_hwsd.RData")
+```
+
+Combine datasets.
+```{r}
+df <- df %>% 
+  left_join(
+    df_hwsd %>% 
+      unnest(data)
+  )
+```
+
+
+### Topography index
+
+```{r}
+rasta <- raster::raster("~/data/gti_marthews/ga2.nc")
+
+df_gti <- raster::extract(rasta, sp::SpatialPoints(dplyr::select(df_sites, lon, lat) %>% distinct()), sp = TRUE) %>%
+  as_tibble() %>% 
+  rename(gti = GDAL.Band.Number.1)
+
+save(df_gti, file = "data/df_gti.RData")
+
+df <- df_gti%>% 
+      right_join(
+        df,
+        by = c("lon", "lat")
+      )
+```
+
+### CO2
+
+Read CO2 level as the global mean for the respective sampling year.
+
+```{r}
+df_co2 <- ingest(
+  df_sites,
+  source  = "co2_mlo",
+  verbose = FALSE
+  )
+```
