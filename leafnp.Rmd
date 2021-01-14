@@ -14,16 +14,46 @@ library(ingestr)
 ## Read data
 
 ```{r}
-df <- read_csv("~/data/leafNP_tiandi/Global_N_P_dataset_20210103_final.csv", col_types = "idddcccdddddccccccc") %>% 
-  rename(lon = Lon_Di_check_final, 
-         lat = Lat_Di_check_final, 
-         elv = Alt_Di_check_final) %>% 
+df <- read_csv("~/data/LeafNP_tiandi/SLA_updated_leafNP_Di/Global_N_P_dataset_20210110_final.csv") %>%  #, col_types = "idddcccdddddccccccc") %>% 
+  mutate(lon = round(Lon_Di_check_final, digits = 4),
+         lat = round(Lat_Di_check_final, digits = 4),
+         elv = round(Alt_Di_check_final, digits = -1)) %>% 
+  rename(year_start = Sampling_Year_start,
+         year_end = Sampling_Year_end) %>% 
   
   ## to be done: make sampling year info machine readable: either in the form of "9999" or "8888_9999"
-  separate(Sampling_Year, sep = "_", c("year_start", "year_end")) 
+  separate(Sampling_Month, sep = "_", c("month_start", "month_end")) 
   # rowwise() %>% 
   # mutate(year_mid = mean(year_start, year_end, na.rm = TRUE))
 ```
+
+
+### Complement missing elevation
+
+```{r}
+df_tmp <- df %>% 
+  dplyr::select(lon, lat, elv) %>% 
+  dplyr::filter(is.na(elv)) %>% 
+  dplyr::select(lon, lat) %>% 
+  distinct() %>% 
+  mutate(sitename = paste0("i", 1:n()))
+
+df_etopo <- ingest(
+  df_tmp,
+  source = "etopo1",
+  dir = "~/data/etopo/"  # adjust this with your local path
+  ) %>% 
+  unnest(data) %>% 
+  right_join(df_tmp, by = "sitename") %>% 
+  rename(elv_etopo = elv)
+  
+df <- df %>% 
+  left_join(df_etopo, by = c("lon", "lat")) %>% 
+  rowwise() %>% 
+  mutate(elv = ifelse(is.na(elv), elv_etopo, elv)) %>% 
+  dplyr::select(-sitename, -elv_etopo)
+```
+
 
 ## Identify sites
 
@@ -32,20 +62,17 @@ Identify sites (unique lon, lat, elevation)
 df_sites <- df %>%
   dplyr::select(lon, lat, elv) %>% 
   distinct() %>% 
-  mutate(sitename = paste0("i", 1:n()))
+  mutate(sitename = paste0("i_", as.character(lon), "_", as.character(lat), "_", as.character(elv)))
 
 df <- df %>% 
   left_join(df_sites, by = c("lon", "lat", "elv"))
 
-df_sites <- df_sites %>% 
-  left_join(df %>% dplyr::select(Record_ID, sitename, year_start, year_end),
-            by = "sitename") %>% 
-  group_by(lon, lat, elv, sitename) %>% 
+## determine start and end year for each site based on available measurements
+df_sites <- df %>% dplyr::select(sitename, year_start, year_end) %>% 
+  group_by(sitename) %>% 
   summarise(year_start = min(year_start, na.rm = TRUE),
             year_end   = max(year_end, na.rm = TRUE)) %>% 
-  rowwise() %>% 
-  mutate(year_end = ifelse(is.na(year_end), year_start, year_end)) %>% 
-  ungroup()
+  right_join(df_sites, by = "sitename")
 ```
 
 Sites on a global map
@@ -54,7 +81,41 @@ plot_map_simpl() +
   geom_point(data = df_sites, aes(x = lon, y = lat), color = "red", size = 0.3)
 ```
 
+## Identify cells
 
+Based on half-degree global grid. ACTUALLY NOT NEEDED.
+```{r eval=FALSE}
+## bin to half-degree gridcells for determining climate forcing
+dlon <- 0.5
+dlat <- 0.5
+lon_breaks <- seq(from = floor(min(df_sites$lon)), to = ceiling(max(df_sites$lon)), by = dlon)
+lat_breaks <- seq(from = floor(min(df_sites$lat)), to = ceiling(max(df_sites$lat)), by = dlat)
+
+df_sites <- df_sites %>%
+  ungroup() %>% 
+  mutate(ilon = cut(lon, 
+                    breaks = lon_breaks
+                    ),
+         ilat = cut(lat, 
+                    breaks = lat_breaks
+                    )
+         ) %>% 
+  mutate(lon_lower = as.numeric( sub("\\((.+),.*", "\\1", ilon)),
+         lon_upper = as.numeric( sub("[^,]*,([^]]*)\\]", "\\1", ilon) ),
+         lat_lower = as.numeric( sub("\\((.+),.*", "\\1", ilat) ),
+         lat_upper = as.numeric( sub("[^,]*,([^]]*)\\]", "\\1", ilat) )
+         ) %>% 
+  mutate(lon_mid = (lon_lower + lon_upper)/2,
+         lat_mid = (lat_lower + lat_upper)/2) %>% 
+  
+  ## create cell name to associate with climate input
+  mutate(cellname = paste0("icell_", as.character(lon_mid), "_", as.character(lat_mid))) %>% 
+  dplyr::select(-ilon, -ilat, -lon_lower, -lon_upper, -lat_lower, -lat_upper)
+
+df_cells <- df_sites %>% 
+  dplyr::select(cellname, lon_mid, lat_mid) %>% 
+  distinct()
+```
 
 ## Complement dataset
 
@@ -113,12 +174,47 @@ df <- df_gti%>%
 
 ### CO2
 
-Read CO2 level as the global mean for the respective sampling year.
-
+Read CO2 level as the global mean and a mean over all the years over which sampling was done. This means that if we have replicate measurements for a given species at a given site, the measurements are given the same CO2 level. This assumes that replicates are not intended to cover a time period over which the environment changes.
 ```{r}
 df_co2 <- ingest(
   df_sites,
   source  = "co2_mlo",
   verbose = FALSE
   )
+
+df <- df_co2 %>% 
+  mutate(co2 = purrr::map_dbl(data, ~{summarise(., co2 = mean(co2)) %>% pull(co2)})) %>% 
+  dplyr::select(-data) %>% 
+  right_join(df, by = "sitename")
 ```
+
+### Nitrogen deposition
+
+Read N deposition from Lamarque et al. (2011) as NOx and NOy in gN m$^{-2}$ yr$^{-1}$ for respective year and location (based on half-degree input file).
+```{r}
+filn <- "data/df_ndep.RData"
+if (!file.exists(filn)){
+  df_ndep <- ingest(
+    df_sites,
+    source    = "ndep",
+    timescale = "y",
+    dir       = "~/data/ndep_lamarque/",
+    verbose   = FALSE
+    )
+  
+  save(df_ndep, file = filn)
+} else {
+  load(filn)
+}
+
+## take sum of noy and nhx and aggregate over years
+df_ndep_agg <- df_ndep %>% 
+  mutate(data = purrr::map(data, ~mutate(., ndep = noy + nhx))) %>% 
+  mutate(data = purrr::map(data, ~summarise(., ndep = mean(ndep, na.rm = TRUE)))) %>% 
+  unnest(data)
+
+## add to data
+df <- df %>% 
+  left_join(df_ndep_agg, by = "sitename")
+```
+
