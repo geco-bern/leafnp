@@ -130,18 +130,24 @@ df_cells <- df_sites %>%
 Read HWSD for each site.
 
 ```{r eval=FALSE}
-df_hwsd <- ingest(
-  df_sites,
-  source = "hwsd",
-  settings = list(fil = "~/data/hwsd/HWSD_RASTER/hwsd.bil")
-  )
-
-## for some it got info for multiple soil types - take only first ones => TEST INFLUENCE OF THIS
-df_hwsd <- df_hwsd %>% 
-  mutate(n_row = purrr::map_int(data, ~nrow(.))) %>% 
-  mutate(data = purrr::map(data, ~slice(., 1)))
-
-save(df_hwsd, file = "data/df_hwsd.RData")
+filn <- "data/df_hwsd.RData"
+if (!file.exists(filn)){
+  df_hwsd <- ingest(
+    df_sites,
+    source = "hwsd",
+    settings = list(fil = "~/data/hwsd/HWSD_RASTER/hwsd.bil")
+    )
+  
+  ## for some it got info for multiple soil types - take only first ones => TEST INFLUENCE OF THIS
+  df_hwsd <- df_hwsd %>% 
+    mutate(n_row = purrr::map_int(data, ~nrow(.))) %>% 
+    mutate(data = purrr::map(data, ~slice(., 1)))
+  
+  save(df_hwsd, file = filn)
+  
+} else {
+  load(filn)
+}
 ```
 
 Combine datasets.
@@ -157,14 +163,18 @@ df <- df %>%
 ### Topography index
 
 ```{r}
-rasta <- raster::raster("~/data/gti_marthews/ga2.nc")
+filn <- "data/df_gti.RData"
+if (!file.exists(filn)){
+  rasta <- raster::raster("~/data/gti_marthews/ga2.nc")
+  df_gti <- raster::extract(rasta, sp::SpatialPoints(dplyr::select(df_sites, lon, lat) %>% distinct()), sp = TRUE) %>%
+    as_tibble() %>% 
+    rename(gti = GDAL.Band.Number.1)
+  save(df_gti, file = filn)
+} else {
+  load(filn)
+}
 
-df_gti <- raster::extract(rasta, sp::SpatialPoints(dplyr::select(df_sites, lon, lat) %>% distinct()), sp = TRUE) %>%
-  as_tibble() %>% 
-  rename(gti = GDAL.Band.Number.1)
-
-save(df_gti, file = "data/df_gti.RData")
-
+## add to data 
 df <- df_gti%>% 
       right_join(
         df,
@@ -180,11 +190,14 @@ df_co2 <- ingest(
   df_sites,
   source  = "co2_mlo",
   verbose = FALSE
-  )
-
-df <- df_co2 %>% 
+  ) %>% 
+  
+  ## aggregate over years per site
   mutate(co2 = purrr::map_dbl(data, ~{summarise(., co2 = mean(co2)) %>% pull(co2)})) %>% 
-  dplyr::select(-data) %>% 
+  dplyr::select(-data)
+
+## add to data
+df <- df_co2 %>% 
   right_join(df, by = "sitename")
 ```
 
