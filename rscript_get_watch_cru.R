@@ -1,6 +1,8 @@
 library(ingestr)
 library(tidyverse)
 
+df_cells <- read_csv("data/df_cells.csv")
+
 ddf_watch <- ingest(
   siteinfo = df_cells,
   source    = "watch_wfdei",
