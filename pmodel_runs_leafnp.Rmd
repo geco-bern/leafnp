@@ -52,28 +52,26 @@ df_sites <- df_sites %>%
          lat_upper = as.numeric( sub("[^,]*,([^]]*)\\]", "\\1", ilat) )
          ) %>% 
   mutate(lon_mid = (lon_lower + lon_upper)/2,
-         lat_mid = (lat_lower + lat_upper)/2)
-
-df_sites <- df_sites %>% 
-  group_by(lon_mid, lat_mid) %>% 
-  drop_na(lon_mid, lat_mid)
+         lat_mid = (lat_lower + lat_upper)/2) %>% 
+  dplyr::select(-ilon, -ilat, -lon_lower, -lon_upper, -lat_lower, -lat_upper) %>% 
+  mutate(cellname = paste0("icell_", lon_mid, "_", lat_mid))
 
 ## save again, now with lon_mid, lat_mid
 save(df_sites, file = "data/df_sites.RData")
 
 df_cells <- df_sites %>% 
-  dplyr::select(lon = lon_mid, lat = lat_mid) %>% 
+  dplyr::select(sitename = cellname, lon = lon_mid, lat = lat_mid) %>% 
   distinct() %>% 
 
   ## set for reading all available years, subset to required years for each site later
-  mutate(year_start = 1979, year_end = 2018) %>% 
-  mutate(lon_mid = lon, lat_mid = lat) %>% 
-  mutate(sitename = paste0("icell_", as.character(lon_mid), "_", as.character(lat_mid)))
+  mutate(year_start = 1979, year_end = 2018)
 
 write_csv(df_cells, path = "data/df_cells.csv")
 ```
 
-## Read WATCH-WFDEI climate data
+## Read forcing data
+
+### Climate
 
 Use the ingestr package to read WATCH-WFDEI climate data as daily time series for each cell that contains at least one site. 
 
@@ -96,4 +94,75 @@ ddf_cru <- ingest(
   dir       = "~/data/cru/ts_4.01/"  # adjust this with your local path
 )
 save(ddf_cru, file = "data/ddf_cru.RData")
+```
+
+Combine the two data frames for P-model forcing.
+
+```{r}
+load("data/ddf_watch.RData")
+load("data/ddf_cru.RData")
+
+ddf_meteo <- ddf_watch %>% 
+  tidyr::unnest(data) %>% 
+  left_join(
+    ddf_cru %>% 
+      tidyr::unnest(data),
+    by = c("sitename", "date")
+  ) %>% 
+  group_by(sitename) %>% 
+  tidyr::nest()
+```
+
+### CO2
+
+```{r}
+df_co2 <- read_csv("~/data/co2/cCO2_rcp85_const850-1765.csv")
+```
+
+
+## Set P-model parameters
+
+
+```{r}
+params_siml <- list(
+  spinup             = TRUE,
+  spinupyears        = 10,
+  recycle            = 1,
+  soilmstress        = TRUE,
+  tempstress         = TRUE,
+  calc_aet_fapar_vpd = FALSE,
+  in_ppfd            = TRUE,
+  in_netrad          = FALSE,
+  outdt              = 1,
+  ltre               = FALSE,
+  ltne               = FALSE,
+  ltrd               = FALSE,
+  ltnd               = FALSE,
+  lgr3               = TRUE,
+  lgn3               = FALSE,
+  lgr4               = FALSE
+	)
+
+## calibrated parameters for v3.0 (see https://rpubs.com/stineb/rsofun_benchmark_v30)
+params_modl <- list(
+	kphio           = 0.09423773,
+	soilm_par_a     = 0.33349283,
+	soilm_par_b     = 1.45602286,
+	vpdstress_par_a = 9999,
+	vpdstress_par_b = 9999,
+	vpdstress_par_m = 9999
+	)
+
+df_soiltexture <- bind_rows(
+  top    = tibble(layer = "top",    fsand = 0.4, fclay = 0.3, forg = 0.1, fgravel = 0.1),
+  bottom = tibble(layer = "bottom", fsand = 0.4, fclay = 0.3, forg = 0.1, fgravel = 0.1)
+)
+```
+
+
+## Run P-model
+
+This is a tiny bit more complicated than in the simplest case (described[here](https://stineb.github.io/rsofun/articles/example_pmodel.html#run-the-model)), because we're combining site meta information from `df_sites` with climate forcing by gridcell, based on the gridcell ID.
+```{r}
+
 ```
