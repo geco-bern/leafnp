@@ -73,6 +73,8 @@ df_sites <- df %>% dplyr::select(sitename, year_start, year_end) %>%
   summarise(year_start = min(year_start, na.rm = TRUE),
             year_end   = max(year_end, na.rm = TRUE)) %>% 
   right_join(df_sites, by = "sitename")
+
+write_csv(df_sites, file = "data/df_sites.csv")
 ```
 
 Sites on a global map
@@ -208,13 +210,16 @@ Read N deposition from Lamarque et al. (2011) as NOx and NOy in gN m$^{-2}$ yr$^
 filn <- "data/df_ndep.RData"
 if (!file.exists(filn)){
   df_ndep <- ingest(
-    df_sites,
+    df_sites %>% 
+      ## for some we don't have data beyond 2009
+      rowwise() %>% 
+      mutate(year_start = min(year_start, 2009),
+             year_end = min(year_end, 2009)),
     source    = "ndep",
     timescale = "y",
     dir       = "~/data/ndep_lamarque/",
     verbose   = FALSE
     )
-  
   save(df_ndep, file = filn)
 } else {
   load(filn)

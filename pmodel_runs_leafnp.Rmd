@@ -1,0 +1,97 @@
+---
+title: "P-model simulations for leafNP"
+author: "Beni"
+date: "1/15/2021"
+output: html_document
+---
+
+```{r}
+#knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(ingestr)
+```
+
+## Site meta information
+
+Read the site meta information data frame, created in `leafnp.Rmd`. For site ensemble P-model simulations, it must contain the following columns:
+
+- `sitename`
+- `lon`
+- `lat`
+- `elv`
+- `year_start`
+- `year_end`
+
+```{r}
+df_sites <- read_csv("data/df_sites.csv")
+```
+
+## Determine gridcells
+
+Since we're extracting forcing data from global files provided at half-degree resolution, we want to avoid extracting data for two sites separately if they are located within the same gridcell. Therefore, determine the unique gridcells.
+
+```{r}
+## bin
+dlon <- 0.5
+dlat <- 0.5
+lon_breaks <- seq(from = floor(min(df_sites$lon)), to = ceiling(max(df_sites$lon)), by = dlon)
+lat_breaks <- seq(from = floor(min(df_sites$lat)), to = ceiling(max(df_sites$lat)), by = dlat)
+
+df_sites <- df_sites %>%
+  ungroup() %>% 
+  mutate(ilon = cut(lon, 
+                    breaks = lon_breaks
+                    ),
+         ilat = cut(lat, 
+                    breaks = lat_breaks
+                    )
+         ) %>% 
+  mutate(lon_lower = as.numeric( sub("\\((.+),.*", "\\1", ilon)),
+         lon_upper = as.numeric( sub("[^,]*,([^]]*)\\]", "\\1", ilon) ),
+         lat_lower = as.numeric( sub("\\((.+),.*", "\\1", ilat) ),
+         lat_upper = as.numeric( sub("[^,]*,([^]]*)\\]", "\\1", ilat) )
+         ) %>% 
+  mutate(lon_mid = (lon_lower + lon_upper)/2,
+         lat_mid = (lat_lower + lat_upper)/2)
+
+df_sites <- df_sites %>% 
+  group_by(lon_mid, lat_mid) %>% 
+  drop_na(lon_mid, lat_mid)
+
+## save again, now with lon_mid, lat_mid
+save(df_sites, file = "data/df_sites.RData")
+
+df_cells <- df_sites %>% 
+  dplyr::select(lon = lon_mid, lat = lat_mid) %>% 
+  distinct() %>% 
+
+  ## set for reading all available years, subset to required years for each site later
+  mutate(year_start = 1979, year_end = 2018) %>% 
+  mutate(lon_mid = lon, lat_mid = lat) %>% 
+  mutate(sitename = paste0("icell_", as.character(lon_mid), "_", as.character(lat_mid)))
+
+write_csv(df_cells, path = "data/df_cells.csv")
+```
+
+## Read WATCH-WFDEI climate data
+
+Use the ingestr package to read WATCH-WFDEI climate data as daily time series for each cell that contains at least one site.
+
+```{r}
+ddf_watch <- ingest(
+  siteinfo = df_cells,
+  source    = "watch_wfdei",
+  getvars   = c("temp", "prec", "ppfd", "vpd", "patm"),
+  dir       = "~/data/watch_wfdei/"  # adjust this with your local path
+)
+save(ddf_watch, file = "data/ddf_watch.RData")
+
+
+ddf_cru <- ingest(
+  siteinfo = df_cells,
+  source    = "cru",
+  getvars   = "ccov",
+  dir       = "~/data/cru/ts_4.01/"  # adjust this with your local path
+)
+save(ddf_cru, file = "data/ddf_cru.RData")
+```
