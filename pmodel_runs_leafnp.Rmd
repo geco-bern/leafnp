@@ -181,10 +181,54 @@ df_drivers <- df_drivers %>%
 
 Add climate forcing and subset time series based on start and end year for this site.
 ```{r}
-subset_forcing <- function(forcing, params_siml){
-  forcing %>% 
-    dplyr::filter(year(date) >= params_siml$firstyeartrend[1] & 
-                  year(date) <  params_siml$firstyeartrend[1] + params_siml$nyeartrend[1])
+df_co2 <- read_csv("~/data/co2/cCO2_rcp85_const850-1765.csv")
+
+subset_forcing <- function(df_forcing, params_siml){
+  
+  ## get mean seasonality in forcing to be used for all years before 1979
+  df_forcing_meandoy <- df_forcing %>% 
+    # dplyr::filter(year(date) %in% 1979:1988) %>% 
+    ungroup() %>% 
+    mutate(doy = lubridate::yday(date)) %>% 
+    group_by(doy) %>% 
+    summarise_if(is.numeric, mean, na.rm = TRUE)
+  
+  ## initialise time series for required years
+  ddf <- init_dates_dataframe(
+    yrstart = params_siml$firstyeartrend[1],
+    yrend = params_siml$firstyeartrend[1] + params_siml$nyeartrend[1] - 1,
+    noleap = TRUE
+    )
+
+  ## add available forcing data to given time series 
+  ddf <- ddf %>% 
+    left_join(df_forcing, by = "date") %>% 
+    
+    ## add mean seasonal cycle
+    mutate(doy = lubridate::yday(date)) %>% 
+    left_join(df_forcing_meandoy %>% 
+                rename(temp_doy = temp, patm_doy = patm, qair_doy = qair, vpd_doy = vpd,
+                       ppfd_doy = ppfd, prec_doy = prec, ccov_doy = ccov),
+                by = "doy") %>% 
+    
+    ## fill missing with mean seasonal cycle
+    rowwise() %>% 
+    mutate(temp = ifelse(is.na(temp), temp_doy, temp),
+           vpd  = ifelse(is.na(vpd),  vpd_doy,  vpd),
+           patm = ifelse(is.na(patm), patm_doy, patm),
+           ppfd = ifelse(is.na(ppfd), ppfd_doy, ppfd),
+           prec = ifelse(is.na(prec), prec_doy, prec),
+           ccov = ifelse(is.na(ccov), ccov_doy, ccov)
+    ) %>% 
+    
+    ## merge co2 data in it
+    mutate(year = lubridate::year(date)) %>% 
+    left_join(df_co2, by = "year") %>% 
+    
+    ## remove days in leap years
+    dplyr::filter(!(month(date)==2 & mday(date) == 29))
+  
+  return(ddf)
 }
 
 df_drivers <- df_drivers %>% 
@@ -219,13 +263,12 @@ df_drivers <- df_drivers %>%
 
 This is a tiny bit more complicated than in the simplest case (described[here](https://stineb.github.io/rsofun/articles/example_pmodel.html#run-the-model)), because we're combining site meta information from `df_sites` with climate forcing by gridcell, based on the gridcell ID.
 ```{r}
-df_pmodel <- df_drivers %>% 
-  dplyr::mutate(out = purrr::pmap(
-    .,
-    run_pmodel_f_bysite,
-    params_modl = params_modl,
-    makecheck = TRUE
-  ))
+df_pmodel <- runread_pmodel_f(
+  df_drivers,
+  params_modl = params_modl,
+  makecheck = TRUE,
+  parallel = FALSE
+  )
 
 save(df_pmodel, file = "data/df_pmodel.RData")
 
