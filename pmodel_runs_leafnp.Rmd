@@ -75,7 +75,9 @@ write_csv(df_cells, path = "data/df_cells.csv")
 
 ## Read WATCH-WFDEI climate data
 
-Use the ingestr package to read WATCH-WFDEI climate data as daily time series for each cell that contains at least one site.
+Use the ingestr package to read WATCH-WFDEI climate data as daily time series for each cell that contains at least one site. 
+
+Actually it's best to do this on the Euler cluster. Submit it as a job with the submission file `submit_get_watch_cru.sh` (a Bash script), running an R script (`rscript_get_watch_cru.R`) that contains the same code as the chunk below.
 
 ```{r}
 ddf_watch <- ingest(
