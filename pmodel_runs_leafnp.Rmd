@@ -9,6 +9,7 @@ output: html_document
 #knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(ingestr)
+library(rsofun)
 ```
 
 ## Site meta information
@@ -77,7 +78,7 @@ Use the ingestr package to read WATCH-WFDEI climate data as daily time series fo
 
 Actually it's best to do this on the Euler cluster. Submit it as a job with the submission file `submit_get_watch_cru.sh` (a Bash script), running an R script (`rscript_get_watch_cru.R`) that contains the same code as the chunk below.
 
-```{r}
+```{r eval=FALSE}
 ddf_watch <- ingest(
   siteinfo = df_cells,
   source    = "watch_wfdei",
@@ -98,7 +99,7 @@ save(ddf_cru, file = "data/ddf_cru.RData")
 
 Combine the two data frames for P-model forcing.
 
-```{r}
+```{r eval=FALSE}
 load("data/ddf_watch.RData")
 load("data/ddf_cru.RData")
 
@@ -115,13 +116,12 @@ ddf_meteo <- ddf_watch %>%
 
 ### CO2
 
-```{r}
+```{r eval=FALSE}
 df_co2 <- read_csv("~/data/co2/cCO2_rcp85_const850-1765.csv")
 ```
 
 
 ## Set P-model parameters
-
 
 ```{r}
 params_siml <- list(
@@ -159,10 +159,77 @@ df_soiltexture <- bind_rows(
 )
 ```
 
+## Prepare drivers for P-model
+
+Run `prepare_setup_sofun()` to define the simulation settings that contain all the information specified by the two steps above (meta info, and simulation parameters), global simulation parameters are wrapped inside an additional column `params_siml`, added to the site meta info dataframe.
+```{r}
+df_drivers <- prepare_setup_sofun(siteinfo = df_sites, params_siml = params_siml)
+```
+
+Nest site info
+```{r}
+df_drivers <- df_drivers %>% 
+  dplyr::select(sitename, lon, lat, elv) %>% 
+  mutate(c4 = FALSE, whc = 240) %>% 
+  group_by(sitename) %>% 
+  nest() %>% 
+  rename(siteinfo = data) %>% 
+  left_join(df_drivers %>% 
+              dplyr::select(sitename, params_siml, cellname),
+            by = "sitename")
+```
+
+Add climate forcing and subset time series based on start and end year for this site.
+```{r}
+subset_forcing <- function(forcing, params_siml){
+  forcing %>% 
+    dplyr::filter(year(date) >= params_siml$firstyeartrend[1] & 
+                  year(date) <  params_siml$firstyeartrend[1] + params_siml$nyeartrend[1])
+}
+
+df_drivers <- df_drivers %>% 
+  left_join(ddf_meteo %>% 
+              rename(cellname = sitename), 
+            by = "cellname") %>% 
+  mutate(forcing = purrr::map2(forcing, params_siml, ~subset_forcing(.x, .y)))
+```
+
+Add soil texture data frame (for completeness, but not actually used).
+```{r}
+df_drivers <- df_soiltexture %>%
+  dplyr::mutate(tmp = 1) %>% 
+  group_by(tmp) %>% 
+  nest() %>% 
+  rename(df_soiltexture = data) %>% 
+  right_join(
+    df_drivers %>% 
+      mutate(tmp = 1),
+    by = "tmp"
+  ) %>% 
+  dplyr::select(-tmp)
+```
+
+Right order of columns for `pmap`.
+```{r}
+df_drivers <- df_drivers %>% 
+  dplyr::select(sitename, params_siml, siteinfo, df_soiltexture, forcing)
+```
 
 ## Run P-model
 
 This is a tiny bit more complicated than in the simplest case (described[here](https://stineb.github.io/rsofun/articles/example_pmodel.html#run-the-model)), because we're combining site meta information from `df_sites` with climate forcing by gridcell, based on the gridcell ID.
 ```{r}
+df_pmodel <- df_drivers %>% 
+  dplyr::mutate(out = purrr::pmap(
+    .,
+    run_pmodel_f_bysite,
+    params_modl = params_modl,
+    makecheck = TRUE
+  ))
 
+save(df_pmodel, file = "data/df_pmodel.RData")
+
+df_pmodel_flat <- df_pmodel %>% 
+  unnest(out)
+write_csv(df_pmodel_flat, path = "data/df_pmodel_flat.csv")
 ```
