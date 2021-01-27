@@ -27,9 +27,18 @@ Read the site meta information data frame, created in `leafnp.Rmd`. For site ens
 df_sites <- read_csv("data/df_sites.csv")
 ```
 
+# Simulation by sites
+
+In this case, we're extracting climate forcing data for each site (irrespective of whether multiple sites are located within a single gridcell of the global forcing data sets).
+
+
+# Simulation by gridcells
+
+Since we're extracting forcing data from global files provided at half-degree resolution, we want to avoid extracting data for two sites separately if they are located within the same gridcell. This has the advantage of reducing the number of sites, but comes at the disadvantage of resolving within-gridcell differences between different sites' climate forcing. This may be negligible, except for the conversion of specific humidity to vapour pressure deficit, which takes elevation as input. Note that the explicit elevation-dependence (i.e. atmospheric pressure-dependence) of photosynthetic processes comes in through using the site's elevation as an argument to the model call.
+
 ## Determine gridcells
 
-Since we're extracting forcing data from global files provided at half-degree resolution, we want to avoid extracting data for two sites separately if they are located within the same gridcell. Therefore, determine the unique gridcells.
+Therefore, determine the unique gridcells.
 
 ```{r}
 ## bin
@@ -82,7 +91,7 @@ Actually it's best to do this on the Euler cluster. Submit it as a job with the 
 ddf_watch <- ingest(
   siteinfo = df_cells,
   source    = "watch_wfdei",
-  getvars   = c("temp", "prec", "ppfd", "vpd", "patm"),
+  getvars   = c("temp", "prec", "ppfd", "vpd"),
   dir       = "~/data/watch_wfdei/"  # adjust this with your local path
 )
 save(ddf_watch, file = "data/ddf_watch.RData")
