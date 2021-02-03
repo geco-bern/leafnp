@@ -27,7 +27,6 @@ df <- read_csv("~/data/LeafNP_tiandi/SLA_updated_leafNP_Di/Global_N_P_dataset_20
   # mutate(year_mid = mean(year_start, year_end, na.rm = TRUE))
 ```
 
-
 ### Complement missing elevation
 
 ```{r}
@@ -54,10 +53,10 @@ df <- df %>%
   dplyr::select(-sitename, -elv_etopo)
 ```
 
-
 ## Identify sites
 
 Identify sites (unique lon, lat, elevation)
+
 ```{r}
 df_sites <- df %>%
   dplyr::select(lon, lat, elv) %>% 
@@ -77,7 +76,64 @@ df_sites <- df %>% dplyr::select(sitename, year_start, year_end) %>%
 write_csv(df_sites, file = "data/df_sites.csv")
 ```
 
+## Data overview
+
+### Observations per species
+
+How many observations per species?
+
+```{r}
+tmp <- df %>% 
+  group_by(Species) %>% 
+  summarise(count = n()) %>% 
+  ungroup() %>% 
+  arrange(desc(count))
+
+tmp %>% 
+  ggplot(aes(x = count, y = ..count..)) +
+  geom_histogram()
+```
+
+### Observations per genus
+
+How many observations per genus?
+
+```{r}
+tmp <- df %>% 
+  group_by(Genus) %>% 
+  summarise(count = n()) %>% 
+  ungroup() %>% 
+  arrange(desc(count))
+
+tmp
+
+tmp %>% 
+  ggplot(aes(x = count, y = ..count..)) +
+  geom_histogram()
+```
+
+### Observations per family
+
+How many observations per family?
+
+```{r}
+tmp <- df %>% 
+  group_by(Family) %>% 
+  summarise(count = n()) %>% 
+  ungroup() %>% 
+  arrange(desc(count))
+
+tmp
+
+tmp %>% 
+  ggplot(aes(x = count, y = ..count..)) +
+  geom_histogram()
+```
+
+### Site distribution
+
 Sites on a global map
+
 ```{r}
 plot_map_simpl() +
   geom_point(data = df_sites, aes(x = lon, y = lat), color = "red", size = 0.3)
@@ -86,6 +142,7 @@ plot_map_simpl() +
 ## Identify cells
 
 Based on half-degree global grid. ACTUALLY NOT NEEDED.
+
 ```{r eval=FALSE}
 ## bin to half-degree gridcells for determining climate forcing
 dlon <- 0.5
@@ -123,9 +180,8 @@ df_cells <- df_sites %>%
 
 *Look into:*
 
-- Complement dataset with data points where only Nmass or only Pmass is available (no strict requirement to have paired Nmass and Pmass for this analysis).
-- Information about species identity, family, genus
-
+-   Complement dataset with data points where only Nmass or only Pmass is available (no strict requirement to have paired Nmass and Pmass for this analysis).
+-   Information about species identity, family, genus
 
 ### Soil
 
@@ -153,6 +209,7 @@ if (!file.exists(filn)){
 ```
 
 Combine datasets.
+
 ```{r}
 df <- df %>% 
   left_join(
@@ -160,7 +217,6 @@ df <- df %>%
       unnest(data)
   )
 ```
-
 
 ### Topography index
 
@@ -187,6 +243,7 @@ df <- df_gti%>%
 ### CO2
 
 Read CO2 level as the global mean and a mean over all the years over which sampling was done. This means that if we have replicate measurements for a given species at a given site, the measurements are given the same CO2 level. This assumes that replicates are not intended to cover a time period over which the environment changes.
+
 ```{r}
 df_co2 <- ingest(
   df_sites,
@@ -206,6 +263,7 @@ df <- df_co2 %>%
 ### Nitrogen deposition
 
 Read N deposition from Lamarque et al. (2011) as NOx and NOy in gN m$^{-2}$ yr$^{-1}$ for respective year and location (based on half-degree input file).
+
 ```{r}
 filn <- "data/df_ndep.RData"
 if (!file.exists(filn)){
@@ -236,3 +294,25 @@ df <- df %>%
   left_join(df_ndep_agg, by = "sitename")
 ```
 
+### Extracting from global NetCDF files
+
+This is a code example and is to be used for extracting AI, alpha, and CWDX40 (see [here](<https://www.notion.so/computationales/4e2e0ca6b5d3497894c64bed71a4937d?v=0ee5d81cd0fe42ac8ac1ed0a938b3380>)).
+
+```{r}
+library(raster)
+
+filn <- "~/data/mct_data/cwdx40.nc"
+siteinfo <- tibble(sitename = "id1", lon = 100, lat = 50)  # example for required dataframe structure
+
+## using raster package
+rasta <- raster::raster(filn)  # use raster::brick() if data has three dimensions
+df <- raster::extract(
+    rasta,
+    sp::SpatialPoints(dplyr::select(siteinfo, lon, lat)), # , proj4string = sta@crs
+    sp = TRUE
+    ) %>%
+  as_tibble()
+
+## or simply using rbeni
+df <- rbeni::extract_pointdata_allsites(filn, df_lonlat = siteinfo)
+```
