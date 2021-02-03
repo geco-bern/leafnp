@@ -183,9 +183,43 @@ df_cells <- df_sites %>%
 -   Complement dataset with data points where only Nmass or only Pmass is available (no strict requirement to have paired Nmass and Pmass for this analysis).
 -   Information about species identity, family, genus
 
-### Soil
+### Climate indeces
 
-Read HWSD for each site.
+XXX can be extracted directly from WorldClim using ingestr. may ignore this section. XXX
+
+This is how it can be done.
+
+```{r}
+## ddf_watch must be a flat data frame (not nested)
+## functions to calculate all climate indexes are implemented here:
+source("R/calc_climate_index.R")
+
+## test: use just data for two sites
+testcells <- unique(ddf_watch$sitename)[1:2]
+
+df_climate_ind <- ddf_watch %>% 
+  dplyr::filter(sitename %in% testcells) %>% 
+  group_by(sitename) %>% 
+  nest() %>% 
+  mutate(mat = purrr::map(data, ~calc_climate_index_mat(.)),
+         matgs = purrr::map(data, ~calc_climate_index_matgs(., temp_base = 5.0)),
+         tmonthmin = purrr::map(data, ~calc_climate_index_tmonthmin(.)),
+         tmonthmax = purrr::map(data, ~calc_climate_index_tmonthmax(.)),
+         ndaysgs = purrr::map(data, ~calc_climate_index_ndaysgs(., temp_base = 5.0)),
+         mai = purrr::map(data, ~calc_climate_index_mai(.)),
+         maigs = purrr::map(data, ~calc_climate_index_maigs(., temp_base = 5.0)),
+         map = purrr::map(data, ~calc_climate_index_map(.)),
+         pmonthmin = purrr::map(data, ~calc_climate_index_pmonthmin(.)),
+         mapgs = purrr::map(data, ~calc_climate_index_mapgs(., temp_base = 5.0)),
+         mavgs = purrr::map(data, ~calc_climate_index_mavgs(., temp_base = 5.0)),
+         mav = purrr::map(data, ~calc_climate_index_mav(.))) %>% 
+  dplyr::select(-data) %>% 
+  unnest(c(mat, matgs, tmonthmin, tmonthmax, ndaysgs, mai, maigs, map, pmonthmin, mapgs, mavgs, mav))
+```
+
+### HWSD Soil
+
+Read HWSD for each site. This reads all variables available fro HWSD. Select relevant variables in a separate step.
 
 ```{r eval=FALSE}
 filn <- "data/df_hwsd.RData"
@@ -215,6 +249,77 @@ df <- df %>%
   left_join(
     df_hwsd %>% 
       unnest(data)
+  )
+```
+
+### SoilGrids
+
+Define all variables to be extracted from SoilGrids
+
+```{r}
+settings_soilgrids <- get_settings_soilgrids(
+  varnam = c("nitrogen", "cec"), # xxx please adjust
+  layer = 1:3                    # xxx please adjust
+  )
+```
+
+Get and save data.
+
+```{r}
+df_soilgrids <- ingest(
+  df_sites,
+  source    = "soilgrids",
+  settings  = settings_soilgrids
+  ) %>% 
+  unnsest(data)  # to get a normal flat table
+
+save(df_soilgrids, file = "data/df_soilgrids.RData")
+```
+
+### WISE30sec Soil
+
+Define all variables to be extracted from WISE30sec
+
+```{r}
+settings_wise <- get_settings_wise(
+  varnam = c("CNrt", "CECS"),  # xxx please adjust
+  layer = 1:3                  # xxx please adjust
+  )
+```
+
+Get and save data.
+
+```{r}
+df_wise <- ingest(
+  df_sites,
+  source    = "wise",
+  settings  = settings_wise,
+  dir       = "~/data/soil/wise"
+  ) %>% 
+  unnsest(data)  # to get a normal flat table
+
+dave(df_wise, file = "data/df_wise.RData")
+```
+
+### GSDE Soil XXX
+
+Define all variables to be extracted from GSDE. This is not using ingestr.
+
+```{r}
+settings_wise <- get_settings_gsde(
+  varnam = c("CNrt", "CECS"),  # xxx please adjust
+  layer = 1:3                  # xxx please adjust
+  )
+```
+
+Get data.
+
+```{r}
+df_wise <- ingest(
+  df_sites,
+  source    = "wise",
+  settings  = settings_wise,
+  dir       = "~/data/soil/wise"
   )
 ```
 
