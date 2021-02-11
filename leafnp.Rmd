@@ -403,6 +403,11 @@ df <- df %>%
 
 This is a code example and is to be used for extracting AI, alpha, and CWDX40 (see [here](<https://www.notion.so/computationales/4e2e0ca6b5d3497894c64bed71a4937d?v=0ee5d81cd0fe42ac8ac1ed0a938b3380>)).
 
+Use the following files:
+
+- `~/data/mct_data/cwdx40.nc` for CWDX40.
+- `~/data/sofun_outputs/global_FULL_MODIS-C006_MOD15A2_v3.4/global_FULL_MODIS-C006_MOD15A2_v3.4.a.alpha_MEANANN.nc` for alpha.
+
 ```{r}
 library(raster)
 
