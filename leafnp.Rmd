@@ -6,7 +6,10 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
-library(tidyverse)
+library(dplyr)
+library(tidyr)
+library(readr)
+library(purrr)
 library(rbeni)
 library(ingestr)
 ```
@@ -128,6 +131,14 @@ df_cells <- df_sites %>%
 -   Information about species identity, family, genus
 
 ### Climate indeces
+
+PET must be read separately. It's available from SOFUN outputs. Extract time series and add to `ddf_watch`.
+
+```{r}
+rbeni::extract_pointdata_allsites(
+  filename = "~/data/sofun_outputs/global_FULL_MODIS-C006_MOD15A2_v1.4-12-g1b77a9e/global_FULL_MODIS-C006_MOD15A2_v1.4-12-g1b77a9e.a.pet_MEANANN.nc",
+  df_lonlat = df_sites %>% slice(1:3))
+```
 
 This is how it can be done.
 
@@ -336,7 +347,13 @@ df_ndep_agg <- df_ndep %>%
   mutate(data = purrr::map(data, ~summarise(., ndep = mean(ndep, na.rm = TRUE)))) %>% 
   unnest(data)
 
-## add to data
+
+```
+
+### Combine all data
+
+```{r}
 df <- df %>% 
   left_join(df_ndep_agg, by = "sitename")
+...
 ```
