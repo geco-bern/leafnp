@@ -7,11 +7,33 @@ output: html_document
 
 ```{r}
 #knitr::opts_chunk$set(echo = TRUE)
-library(dplyr)
-library(readr)
+library(tidyverse)
 library(ingestr)
 library(rsofun)
 ```
+
+The challenge is to use very site specific forcing data for each site and the data load required for generating full forcing and output time series for ~30,000 sites. In the end, we only need one value per site (Vcmax25). Let's therefore wrap collecting forcing data, running the model, and aggregating outputs to the required single value into a one function. A further challenge is that if all original forcing files have to be opened and read for each site, it takes forever. We cannot do this for all sites at once becaause of RAM memory overload. An optimal middle ground may be to do split this up into chunks, each comprising 100 sites. That makes ~300 chunks. That is 300 simulations in parallel with manageable memory requirements. Let's do that.
+
+Define a function wrapping the ingest and the pmodel steps for a site of sites, given their lon and lat (and elv and years range), provided as a data frame. The following is an example for such a site set. This is implemented by `ingest_run_rsofun()`.
+```{r}
+siteinfo <- tibble(
+  sitename = c("site_rsofun_demo_1", "site_rsofun_demo_2", "site_rsofun_demo_3"),
+  lon = c(100.05, 100.45, 90),
+  lat = c(50, 50, 50),
+  elv = c(1000, 250, 2500),
+  year_start = c(1960, 2001, 2005),
+  year_end = c(2005, 2006, 2007),
+  whc = 200
+)
+
+df <- ingest_run_rsofun(siteinfo)
+```
+
+
+
+---
+
+# OLD
 
 ## Site meta information
 
