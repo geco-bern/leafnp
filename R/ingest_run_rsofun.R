@@ -82,19 +82,13 @@ ingest_run_rsofun <- function(df){
     parallel = FALSE
   )
   
-  ## xxx try
-  df_output$data[[1]] %>% 
-    ggplot(aes(date, vcmax25)) +
-    geom_line()
-  
   ## gpp-weighted mean of vcmax25
   df_output <- df_output %>% 
     mutate(data = purrr::map(data, ~mutate(., vcmax25_wgt = vcmax25 * gpp))) %>% 
     mutate(data = purrr::map(data, ~summarise(., gpp_sum = sum(gpp), vcmax25_wgt_sum = sum(vcmax25_wgt)))) %>% 
     mutate(data = purrr::map(data, ~mutate(., vcmax25 = vcmax25_wgt_sum / gpp_sum))) %>% 
     unnest(data) %>% 
-    dplyr::select(sitename, vcmax25_wgt_sum) %>% 
-    rename(vcmax25 = vcmax25_wgt_sum)
+    dplyr::select(sitename, vcmax25)
   
   return(df_output)
   

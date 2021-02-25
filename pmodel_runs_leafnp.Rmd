@@ -10,6 +10,7 @@ output: html_document
 library(tidyverse)
 library(ingestr)
 library(rsofun)
+source("R/ingest_run_rsofun.R")
 ```
 
 The challenge is to use very site specific forcing data for each site and the data load required for generating full forcing and output time series for ~30,000 sites. In the end, we only need one value per site (Vcmax25). Let's therefore wrap collecting forcing data, running the model, and aggregating outputs to the required single value into a one function. A further challenge is that if all original forcing files have to be opened and read for each site, it takes forever. We cannot do this for all sites at once becaause of RAM memory overload. An optimal middle ground may be to do split this up into chunks, each comprising 100 sites. That makes ~300 chunks. That is 300 simulations in parallel with manageable memory requirements. Let's do that.
