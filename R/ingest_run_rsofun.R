@@ -1,4 +1,4 @@
-ingest_run_rsofun <- function(df){
+ingest_run_rsofun <- function(siteinfo){
   
   ddf_watch <- ingest(
     siteinfo = siteinfo,
