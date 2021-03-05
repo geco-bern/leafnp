@@ -2,6 +2,19 @@ ingest_run_rsofun <- function(siteinfo, ichunk = "X", totchunk = "XX"){
   
   source("R/calc_climate_index.R")
   
+  ## complement siteinfo with WHC based on S_CWDX80
+  filn <- "~/data/mct_data/cwdx80.nc"
+  siteinfo <- siteinfo %>% 
+    left_join(rbeni::extract_pointdata_allsites(filn, df_lonlat = dplyr::select(siteinfo, sitename, lon, lat)) %>% 
+                setNames(c("whc", "lon", "lat")),
+              by = c("lon", "lat")
+              )
+  
+  ## fill gaps in whc
+  whc_median <- median(siteinfo$whc, na.rm = TRUE)
+  siteinfo <- siteinfo %>% 
+    mutate(whc = ifelse(is.na(whc), whc_median, whc))
+  
   path_watch <- paste0("data/ddf_watch_chunk_", as.character(ichunk), "_", as.character(totchunk), ".RData")
   if (!file.exists(path_watch)){
     ddf_watch <- ingest(
@@ -143,6 +156,10 @@ ingest_run_rsofun <- function(siteinfo, ichunk = "X", totchunk = "XX"){
     right_join(df_output, by = "sitename") %>% 
     left_join(df_aet, by = "sitename") %>% 
     mutate(ai = map / aet)
+  
+  ## add S_CWDX80 to output as an additional climate index
+  df_output <- df_output %>% 
+    left_join(dplyr::select(siteinfo, sitename, cwdx80 = whc), by = "sitename")
   
   return(df_output)
   
