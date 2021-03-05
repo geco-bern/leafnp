@@ -1,8 +1,8 @@
-ingest_run_rsofun <- function(siteinfo, ichunk = "X"){
+ingest_run_rsofun <- function(siteinfo, ichunk = "X", totchunk = "XX"){
   
   source("R/calc_climate_index.R")
   
-  path_watch <- paste0("data/ddf_watch_chunk_", as.character(ichunk), ".RData")
+  path_watch <- paste0("data/ddf_watch_chunk_", as.character(ichunk), "_", as.character(totchunk), ".RData")
   if (!file.exists(path_watch)){
     ddf_watch <- ingest(
       siteinfo = siteinfo,
@@ -16,7 +16,7 @@ ingest_run_rsofun <- function(siteinfo, ichunk = "X"){
     load(path_watch)
   }
   
-  path_cru <- paste0("data/ddf_cru_chunk_", as.character(ichunk), ".RData")
+  path_cru <- paste0("data/ddf_cru_chunk_", as.character(ichunk), "_", as.character(totchunk), ".RData")
   if (!file.exists(path_cru)){
     ddf_cru <- ingest(
       siteinfo = siteinfo,
