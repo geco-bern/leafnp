@@ -36,6 +36,10 @@ df_sites_sub <- df_sites %>%
 ##------------------------------------------------------------------------
 ## ingest forcing data, run P-model, and get climate indeces at once
 ##------------------------------------------------------------------------
-df_pmodel <- ingest_run_rsofun(df_sites_sub, ichunk = args[1], totchunk = args[2])
-
-save(df_pmodel, file = paste0("data/df_pmodel_ichunk_", as.character(args[1]), "_", as.character(args[2]), ".RData"))
+filn <- paste0("data/df_pmodel_ichunk_", as.character(args[1]), "_", as.character(args[2]), ".RData")
+if (!file.exists(filn)){
+  df_pmodel <- ingest_run_rsofun(df_sites_sub, ichunk = args[1], totchunk = args[2])
+  save(df_pmodel, file = filn)
+} else {
+  print(paste("File exists already: ", filn))
+}
