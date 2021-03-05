@@ -1,7 +1,8 @@
 ## mean annual temperature
 calc_climate_index_mat <- function(df, ...){
   df %>% 
-    summarise(mat = mean(temp, ...))
+    summarise(mat = mean(temp, ...)) %>% 
+    pull(mat)
 }
 
 ## mean temperature during growing season

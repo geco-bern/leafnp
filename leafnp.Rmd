@@ -7,6 +7,7 @@ output: html_document
 
 ```{r setup, include=FALSE}
 library(dplyr)
+library(ggplot2)
 library(tidyr)
 library(readr)
 library(purrr)
@@ -17,28 +18,45 @@ library(ingestr)
 ## Read data
 
 ```{r}
-df <- read_csv("~/data/LeafNP_tiandi/SLA_updated_leafNP_Di/Global_N_P_dataset_20210110_final.csv") %>%  #, col_types = "idddcccdddddccccccc") %>% 
-  mutate(lon = round(Lon_Di_check_final, digits = 4),
-         lat = round(Lat_Di_check_final, digits = 4),
-         elv = round(Alt_Di_check_final, digits = -1)) %>% 
+df <- read_csv("~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/global_leaf_NP_total_Di_20210224.csv") %>%  #, col_types = "idddcccdddddccccccc") %>% 
+  rename(lon = lon_estimate,
+         lat = lat_estimate,
+         elv = Alt_Di_check_final) %>% 
   rename(year_start = Sampling_Year_start,
          year_end = Sampling_Year_end) %>% 
   
   ## to be done: make sampling year info machine readable: either in the form of "9999" or "8888_9999"
-  separate(Sampling_Month, sep = "_", c("month_start", "month_end")) 
-  # rowwise() %>% 
-  # mutate(year_mid = mean(year_start, year_end, na.rm = TRUE))
+  separate(Sampling_Month, sep = "_", c("month_start", "month_end")) %>% 
+  mutate(month_start = as.numeric(month_start), month_end = as.numeric(month_end)) %>% 
+  
+  ## arrange by year
+  arrange(year_start) %>% 
+  
+  ## create identifier
+  mutate(id = paste0("i", seq(nrow(.))))
+
+## save with added ids and site names
+write_csv(df, file = "~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/global_leaf_NP_total_Di_20210224_PROC.csv")
+
+## look at some distributions
+df %>% 
+  ggplot(aes(x = leafN, y = ..density..)) +
+  geom_histogram()
+
+df %>% 
+  ggplot(aes(x = leafP, y = ..density..)) +
+  geom_histogram()
 ```
 
 ### Complement missing elevation
 
 ```{r}
+# df <- read_csv("~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/global_leaf_NP_total_Di_20210224_PROC.csv")
+
 df_tmp <- df %>% 
-  dplyr::select(lon, lat, elv) %>% 
   dplyr::filter(is.na(elv)) %>% 
-  dplyr::select(lon, lat) %>% 
-  distinct() %>% 
-  mutate(sitename = paste0("i", 1:n()))
+  distinct(lon, lat) %>% 
+  mutate(sitename = paste0("i", seq(nrow(.))))
 
 df_etopo <- ingest(
   df_tmp,
@@ -46,14 +64,23 @@ df_etopo <- ingest(
   dir = "~/data/etopo/"  # adjust this with your local path
   ) %>% 
   unnest(data) %>% 
+  
+  ## add it again so it has lon and lat
   right_join(df_tmp, by = "sitename") %>% 
-  rename(elv_etopo = elv)
+  ungroup() %>% 
+  dplyr::select(elv_etopo = elv, -sitename)
   
 df <- df %>% 
   left_join(df_etopo, by = c("lon", "lat")) %>% 
   rowwise() %>% 
   mutate(elv = ifelse(is.na(elv), elv_etopo, elv)) %>% 
-  dplyr::select(-sitename, -elv_etopo)
+  dplyr::select(-elv_etopo) %>% 
+  
+  ## create new variable site name (sometimes multiple obs are available for one site)
+  mutate(sitename = paste0("i_", as.character(lon), "_", as.character(lat), "_", as.character(elv)))
+
+## save with complemented elevation
+write_csv(df, file = "~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/global_leaf_NP_total_Di_20210224_PROC.csv")
 ```
 
 ## Identify sites
@@ -62,12 +89,7 @@ Identify sites (unique lon, lat, elevation)
 
 ```{r}
 df_sites <- df %>%
-  dplyr::select(lon, lat, elv) %>% 
-  distinct() %>% 
-  mutate(sitename = paste0("i_", as.character(lon), "_", as.character(lat), "_", as.character(elv)))
-
-df <- df %>% 
-  left_join(df_sites, by = c("lon", "lat", "elv"))
+  distinct(sitename, lon, lat, elv)
 
 ## determine start and end year for each site based on available measurements
 df_sites <- df %>% dplyr::select(sitename, year_start, year_end) %>% 
@@ -148,8 +170,8 @@ Based on half-degree global grid. ACTUALLY NOT NEEDED.
 
 ```{r eval=FALSE}
 ## bin to half-degree gridcells for determining climate forcing
-dlon <- 0.5
-dlat <- 0.5
+dlon <- 2
+dlat <- 2
 lon_breaks <- seq(from = floor(min(df_sites$lon)), to = ceiling(max(df_sites$lon)), by = dlon)
 lat_breaks <- seq(from = floor(min(df_sites$lat)), to = ceiling(max(df_sites$lat)), by = dlat)
 
@@ -174,9 +196,24 @@ df_sites <- df_sites %>%
   mutate(cellname = paste0("icell_", as.character(lon_mid), "_", as.character(lat_mid))) %>% 
   dplyr::select(-ilon, -ilat, -lon_lower, -lon_upper, -lat_lower, -lat_upper)
 
+write_csv(df_sites, file = "data/df_sites.csv")
+
 df_cells <- df_sites %>% 
   dplyr::select(cellname, lon_mid, lat_mid) %>% 
   distinct()
+
+write_csv(df_cells, file = "data/df_cells.csv")
+```
+
+```{r}
+## sample one site per cell
+df_sites_sampled <- df_sites %>% 
+  dplyr::select(sitename, lon, lat, elv, cellname) %>%
+  group_by(cellname) %>% 
+  sample_n(1)
+  
+plot_map_simpl() +
+  geom_point(data = df_sites_sampled, aes(x = lon, y = lat), color = "red", size = 0.3)
 ```
 
 ## Complement dataset
@@ -416,12 +453,12 @@ df <- df %>%
 
 ### Extracting from global NetCDF files
 
-This is a code example and is to be used for extracting AI, alpha, and CWDX40 (see [here](<https://www.notion.so/computationales/4e2e0ca6b5d3497894c64bed71a4937d?v=0ee5d81cd0fe42ac8ac1ed0a938b3380>)).
+This is a code example and is to be used for extracting AI, alpha, and CWDX40 (see [here](https://www.notion.so/computationales/4e2e0ca6b5d3497894c64bed71a4937d?v=0ee5d81cd0fe42ac8ac1ed0a938b3380)).
 
 Use the following files:
 
-- `~/data/mct_data/cwdx40.nc` for CWDX40.
-- `~/data/sofun_outputs/global_FULL_MODIS-C006_MOD15A2_v3.4/global_FULL_MODIS-C006_MOD15A2_v3.4.a.alpha_MEANANN.nc` for alpha.
+-   `~/data/mct_data/cwdx40.nc` for CWDX40.
+-   `~/data/sofun_outputs/global_FULL_MODIS-C006_MOD15A2_v3.4/global_FULL_MODIS-C006_MOD15A2_v3.4.a.alpha_MEANANN.nc` for alpha.
 
 ```{r}
 library(raster)
