@@ -10,6 +10,7 @@ library(rlang)
 library(lubridate)
 library(ingestr)
 library(rsofun)
+library(rbeni)
 
 source("R/ingest_run_rsofun.R")
 
