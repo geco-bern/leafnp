@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 args = commandArgs(trailingOnly=TRUE)
-#args <- c(1,100)
+#args <- c(1,1000)
 
 library(dplyr)
 library(purrr)
@@ -18,7 +18,7 @@ source("R/ingest_run_rsofun.R")
 df_sites <- read_csv("data/df_sites.csv")
 
 ##------------------------------------------------------------------------
-## split it up into chunks (total number of chunks provided by argument 2)
+## split sites up to this chunk
 ##------------------------------------------------------------------------
 nsites <- nrow(df_sites)
 vec_isites <- seq(nsites)
@@ -26,33 +26,16 @@ nchunk <- as.integer(args[2]) # 1000  # make sure this is consistent with the nu
 nrows_chunk <- ceiling(nsites/nchunk)
 list_irow_chunk <- split(vec_isites, ceiling(seq_along(vec_isites)/nrows_chunk))
 irow_chunk <- list_irow_chunk[[as.integer(args[1])]]
-df_sites_sub <- df_sites %>% slice(irow_chunk)
 
 print("getting data for longitude indices:")
 print(irow_chunk) 
 
-## get all available cores
-ncores <- parallel::detectCores()
+df_sites_sub <- df_sites %>% 
+  slice(irow_chunk)
 
-## limit the number of cores to number of individual runs
-nruns <- length(irow_chunk)
-ncores <- min(ncores, nruns)
+##------------------------------------------------------------------------
+## ingest forcing data, run P-model, and get climate indeces at once
+##------------------------------------------------------------------------
+df_pmodel <- ingest_run_rsofun(df_sites_sub, ichunk = args[1])
 
-if (ncores > 1){
-
-  cl <- multidplyr::new_cluster(ncores) %>%
-    multidplyr::cluster_library(c("dplyr", "purrr", "tidyr", "dplyr", "magrittr", "lubridate", "rlang", "ingestr", "rsofun")) %>%
-    multidplyr::cluster_assign(ingest_run_rsofun = ingest_run_rsofun)
-
-  ## distribute to cores, making sure all data from a specific site is sent to the same core
-  df_out <- tibble(ilon = irow_chunk) %>%
-    multidplyr::partition(cl) %>%
-    dplyr::mutate(out = purrr::map( ilon,
-                                    ~ingest_run_rsofun(.)))
-
-} else {
-
-  ## testing
-  df_out <- purrr::map(as.list(irow_chunk), ~ingest_run_rsofun(.))
-
-}
+save(df_pmodel, file = paste0("data/df_pmodel_ichunk_", as.character(args[1]), ".RData"))
