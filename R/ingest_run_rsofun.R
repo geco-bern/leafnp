@@ -28,7 +28,8 @@ ingest_run_rsofun <- function(siteinfo){
   df_co2 <- ingestr::ingest(
     siteinfo,
     source  = "co2_mlo",
-    verbose = FALSE
+    verbose = FALSE,
+    dir = "~/data/co2/"
   )
   
   ddf_fapar_unity <- ingest(
