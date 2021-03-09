@@ -19,8 +19,8 @@ df_sites <- read_csv("data/df_sites.csv") %>%
   mutate(idx = 1:n())
 
 ## split sites data frame into (almost) equal chunks
-nsites_per_chunk <- nrow(df_sites)/args[2] %>% ceiling()
-list_df_split <- split(df_sites, (seq(nrow(df_sites))) %/% nsites_per_chunk)
+nsites_per_chunk <- ceiling(nrow(df_sites)/args[2])
+list_df_split <- split(df_sites, seq(nrow(df_sites)) %/% nsites_per_chunk)
 
 # ## test
 # df_test <- list_df_split %>% bind_rows()
