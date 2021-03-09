@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 args = commandArgs(trailingOnly=TRUE)
-#args <- c(1,100)
+# args <- c(2,100)
 
 library(dplyr)
 library(purrr)
@@ -15,31 +15,40 @@ library(rbeni)
 source("R/ingest_run_rsofun.R")
 
 ## read sites data frame
-df_sites <- read_csv("data/df_sites.csv")
+df_sites <- read_csv("data/df_sites.csv") %>% 
+  mutate(idx = 1:n())
 
-##------------------------------------------------------------------------
-## split sites up to this chunk
-##------------------------------------------------------------------------
-nsites <- nrow(df_sites)
-vec_isites <- seq(nsites)
-nchunk <- as.integer(args[2]) # 1000  # make sure this is consistent with the number of parallel jobs (job array!) in the submission script
-nrows_chunk <- ceiling(nsites/nchunk)
-list_irow_chunk <- split(vec_isites, ceiling(seq_along(vec_isites)/nrows_chunk))
-irow_chunk <- list_irow_chunk[[as.integer(args[1])]]
+## split sites data frame into (almost) equal chunks
+nsites_per_chunk <- nrow(df_sites)/args[2] %>% ceiling()
+list_df_split <- split(df_sites, (seq(nrow(df_sites))) %/% nsites_per_chunk)
 
-print("getting data for longitude indices:")
-print(irow_chunk) 
+# ## test
+# df_test <- list_df_split %>% bind_rows()
+# all_equal(df_test, df_sites)
 
-df_sites_sub <- df_sites %>% 
-  slice(irow_chunk)
+## retain only the one required for this chunk
+df_sites_sub <- list_df_split[[args[1]]]
+
+print("This chunk contains these rows of the full site data frame:")
+print(df_sites_sub$idx)
 
 ##------------------------------------------------------------------------
 ## ingest forcing data, run P-model, and get climate indeces at once
 ##------------------------------------------------------------------------
 filn <- paste0("data/df_pmodel_ichunk_", as.character(args[1]), "_", as.character(args[2]), ".RData")
 if (!file.exists(filn)){
-  df_pmodel <- ingest_run_rsofun(df_sites_sub, ichunk = args[1], totchunk = args[2])
+  df_pmodel <- ingest_run_rsofun(df_sites_sub, ichunk = args[1], totchunk = args[2], verbose = TRUE)
   save(df_pmodel, file = filn)
 } else {
   print(paste("File exists already: ", filn))
 }
+
+# ## memory profiling
+# library(pryr)
+# library(profvis)
+# prof <- profvis({
+#   df_pmodel <- ingest_run_rsofun(df_sites_sub, ichunk = args[1], totchunk = args[2])
+# })
+# 
+# print(prof)
+

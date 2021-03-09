@@ -1,4 +1,4 @@
-ingest_run_rsofun <- function(siteinfo, ichunk = "X", totchunk = "XX"){
+ingest_run_rsofun <- function(siteinfo, ichunk = "X", totchunk = "XX", verbose = FALSE){
   
   source("R/calc_climate_index.R")
   
@@ -17,27 +17,39 @@ ingest_run_rsofun <- function(siteinfo, ichunk = "X", totchunk = "XX"){
   
   path_watch <- paste0("data/ddf_watch_chunk_", as.character(ichunk), "_", as.character(totchunk), ".RData")
   if (!file.exists(path_watch)){
-    ddf_watch <- ingest(
-      siteinfo = siteinfo,
-      source    = "watch_wfdei",
-      getvars   = c("temp", "prec", "ppfd", "vpd", "patm"),
-      dir       = "~/data/watch_wfdei/",  # adjust this with your local path,
-      settings  = list(correct_bias = "worldclim", dir_bias = "~/data/worldclim")
+    
+    out_mem <- pryr::mem_change(
+      ddf_watch <- ingest(
+        siteinfo = siteinfo,
+        source    = "watch_wfdei",
+        getvars   = c("temp", "prec", "ppfd", "vpd", "patm"),
+        dir       = "~/data/watch_wfdei/",  # adjust this with your local path,
+        settings  = list(correct_bias = "worldclim", dir_bias = "~/data/worldclim")
+      )
     )
     save(ddf_watch, file = path_watch)    
+    if (verbose) print("Memory change 1:")
+    if (verbose) print(out_mem)
+    
   } else {
     load(path_watch)
   }
   
   path_cru <- paste0("data/ddf_cru_chunk_", as.character(ichunk), "_", as.character(totchunk), ".RData")
   if (!file.exists(path_cru)){
-    ddf_cru <- ingest(
-      siteinfo = siteinfo,
-      source    = "cru",
-      getvars   = "ccov",
-      dir       = "~/data/cru/ts_4.01/"  # adjust this with your local path
+    
+    out_mem <- pryr::mem_change(
+      ddf_cru <- ingest(
+        siteinfo = siteinfo,
+        source    = "cru",
+        getvars   = "ccov",
+        dir       = "~/data/cru/ts_4.01/"  # adjust this with your local path
+      )
     )
-    save(ddf_cru, file = path_cru)    
+    save(ddf_cru, file = path_cru)
+    if (verbose) print("Memory change 2:")
+    if (verbose) print(out_mem)
+    
   } else {
     load(path_cru)
   }
