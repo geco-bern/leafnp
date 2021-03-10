@@ -29,7 +29,7 @@ ingest_run_rsofun <- function(siteinfo, ichunk = "X", totchunk = "XX", verbose =
     )
     save(ddf_watch, file = path_watch)    
     if (verbose) print("Memory change 1:")
-    if (verbose) print(out_mem)
+    if (verbose) (out_mem)
     
   } else {
     load(path_watch)

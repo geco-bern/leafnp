@@ -1,7 +1,7 @@
 #!/usr/bin/env Rscript
 args = commandArgs(trailingOnly=TRUE)
-# args <- c(1,100)
-print(args)
+
+# args <- c(88,100)
 
 library(dplyr)
 library(purrr)
@@ -12,6 +12,7 @@ library(lubridate)
 library(ingestr)
 library(rsofun)
 library(rbeni)
+library(pryr)
 
 source("R/ingest_run_rsofun.R")
 
@@ -20,7 +21,7 @@ df_sites <- read_csv("~/leafnp/data/df_sites.csv") %>%
   mutate(idx = 1:n())
 
 ## split sites data frame into (almost) equal chunks
-nsites_per_chunk <- ceiling(nrow(df_sites)/args[2])
+nsites_per_chunk <- nrow(df_sites)/as.integer(args[2])
 list_df_split <- split(df_sites, seq(nrow(df_sites)) %/% nsites_per_chunk)
 
 # ## test
@@ -28,17 +29,19 @@ list_df_split <- split(df_sites, seq(nrow(df_sites)) %/% nsites_per_chunk)
 # all_equal(df_test, df_sites)
 
 ## retain only the one required for this chunk
-df_sites_sub <- list_df_split[[args[1]]]
+df_sites_sub <- list_df_split[[as.integer(args[1])]]
 
 print("This chunk contains these rows of the full site data frame:")
 print(df_sites_sub$idx)
 
+print(list_df_split)
+
 ##------------------------------------------------------------------------
 ## ingest forcing data, run P-model, and get climate indeces at once
 ##------------------------------------------------------------------------
-filn <- paste0("data/df_pmodel_ichunk_", as.character(args[1]), "_", as.character(args[2]), ".RData")
+filn <- paste0("data/df_pmodel_ichunk_", args[1], "_", args[2], ".RData")
 if (!file.exists(filn)){
-  df_pmodel <- ingest_run_rsofun(df_sites_sub, ichunk = args[1], totchunk = args[2], verbose = TRUE)
+  df_pmodel <- ingest_run_rsofun(df_sites_sub, ichunk = args[1], totchunk = args[2], verbose = FALSE)
   save(df_pmodel, file = filn)
 } else {
   print(paste("File exists already: ", filn))
