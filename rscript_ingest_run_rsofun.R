@@ -1,6 +1,7 @@
 #!/usr/bin/env Rscript
 args = commandArgs(trailingOnly=TRUE)
-# args <- c(2,100)
+# args <- c(1,100)
+print(args)
 
 library(dplyr)
 library(purrr)
@@ -15,7 +16,7 @@ library(rbeni)
 source("R/ingest_run_rsofun.R")
 
 ## read sites data frame
-df_sites <- read_csv("data/df_sites.csv") %>% 
+df_sites <- read_csv("~/leafnp/data/df_sites.csv") %>% 
   mutate(idx = 1:n())
 
 ## split sites data frame into (almost) equal chunks
