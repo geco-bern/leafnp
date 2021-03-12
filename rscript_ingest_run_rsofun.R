@@ -1,7 +1,7 @@
 #!/usr/bin/env Rscript
-args = commandArgs(trailingOnly=TRUE)
+#args = commandArgs(trailingOnly=TRUE)
 
-# args <- c(88,100)
+args <- c(92,100)
 
 library(dplyr)
 library(purrr)
@@ -33,8 +33,6 @@ df_sites_sub <- list_df_split[[as.integer(args[1])]]
 
 print("This chunk contains these rows of the full site data frame:")
 print(df_sites_sub$idx)
-
-print(list_df_split)
 
 ##------------------------------------------------------------------------
 ## ingest forcing data, run P-model, and get climate indeces at once
