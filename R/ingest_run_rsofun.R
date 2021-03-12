@@ -32,7 +32,37 @@ ingest_run_rsofun <- function(siteinfo, ichunk = "X", totchunk = "XX", verbose =
     if (verbose) (out_mem)
     
   } else {
+    
     load(path_watch)
+    
+    ## check if any precip data is nan. if so, run ingestr again after it has been bugfixed.
+    problem_prec <- ddf_watch %>% 
+      unnest(data) %>% 
+      pull(prec) %>% 
+      is.nan() %>% 
+      any()
+    problem_ppfd <- ddf_watch %>% 
+      unnest(data) %>% 
+      pull(ppfd) %>% 
+      is.nan() %>% 
+      any()
+    problem_vpd <- ddf_watch %>% 
+      unnest(data) %>% 
+      pull(vpd) %>% 
+      is.nan() %>% 
+      any()
+    
+    if (problem_prec || problem_vpd || problem_ppfd){
+      ddf_watch <- ingest(
+        siteinfo = siteinfo,
+        source    = "watch_wfdei",
+        getvars   = c("temp", "prec", "ppfd", "vpd", "patm"),
+        dir       = "~/data/watch_wfdei/",  # adjust this with your local path,
+        settings  = list(correct_bias = "worldclim", dir_bias = "~/data/worldclim")
+      )
+      save(ddf_watch, file = path_watch)  
+    }
+    
   }
   
   path_cru <- paste0("data/ddf_cru_chunk_", as.character(ichunk), "_", as.character(totchunk), ".RData")
@@ -64,9 +94,9 @@ ingest_run_rsofun <- function(siteinfo, ichunk = "X", totchunk = "XX", verbose =
     group_by(sitename) %>% 
     tidyr::nest()
   
-  df_co2 <- ingestr::ingest(
+  df_co2 <- ingest(
     siteinfo,
-    source  = "co2_mlo",
+    source  = "co2_cmip",
     verbose = FALSE,
     dir = "~/data/co2/"
   )
