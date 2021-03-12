@@ -1,7 +1,7 @@
 #!/usr/bin/env Rscript
-#args = commandArgs(trailingOnly=TRUE)
+# args = commandArgs(trailingOnly=TRUE)
 
-args <- c(92,100)
+args <- c(44,100)
 
 library(dplyr)
 library(purrr)
@@ -17,7 +17,7 @@ library(pryr)
 source("R/ingest_run_rsofun.R")
 
 ## read sites data frame
-df_sites <- read_csv("~/leafnp/data/df_sites.csv") %>% 
+df_sites <- read_csv("~/leafnp/data/df_sites.csv") %>%
   mutate(idx = 1:n())
 
 ## split sites data frame into (almost) equal chunks
@@ -51,6 +51,6 @@ if (!file.exists(filn)){
 # prof <- profvis({
 #   df_pmodel <- ingest_run_rsofun(df_sites_sub, ichunk = args[1], totchunk = args[2])
 # })
-# 
+#
 # print(prof)
 
