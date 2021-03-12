@@ -16,6 +16,8 @@ library(pryr)
 
 source("R/ingest_run_rsofun.R")
 
+reduce_mem <- TRUE
+
 ## read sites data frame
 df_sites <- read_csv("~/leafnp/data/df_sites.csv") %>%
   mutate(idx = 1:n())
@@ -39,8 +41,26 @@ print(df_sites_sub$idx)
 ##------------------------------------------------------------------------
 filn <- paste0("data/df_pmodel_ichunk_", args[1], "_", args[2], ".RData")
 if (!file.exists(filn)){
-  df_pmodel <- ingest_run_rsofun(df_sites_sub, ichunk = args[1], totchunk = args[2], verbose = FALSE)
-  save(df_pmodel, file = filn)
+  if (reduce_mem){
+    
+    ## split into four chunks
+    nsites_per_chunk <- nrow(df_sites_sub)/4
+    list_df_split <- split(df_sites_sub, seq(nrow(df_sites_sub)) %/% nsites_per_chunk)
+    
+    df_pmodel <- tibble()
+    for (idx in seq(4)){
+      df_sites_sub_sub <- list_df_split[[idx]]
+      df_pmodel <- bind_rows(
+        df_pmodel,
+        ingest_run_rsofun(df_sites_sub_sub, ichunk = args[1], totchunk = args[2], subchunk = idx, verbose = FALSE)
+      )
+    }
+    save(df_pmodel, file = filn)
+    
+  } else {
+    df_pmodel <- ingest_run_rsofun(df_sites_sub, ichunk = args[1], totchunk = args[2], subchunk = "", verbose = FALSE)
+    save(df_pmodel, file = filn)
+  }
 } else {
   print(paste("File exists already: ", filn))
 }
