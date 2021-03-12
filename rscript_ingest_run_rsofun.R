@@ -16,7 +16,7 @@ library(pryr)
 
 source("R/ingest_run_rsofun.R")
 
-## read sites data frame
+## read sites data frame. This file is created by leafnp.Rmd
 df_sites <- read_csv("~/leafnp/data/df_sites.csv") %>% 
   mutate(idx = 1:n())
 
