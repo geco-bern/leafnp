@@ -1,7 +1,7 @@
 #!/usr/bin/env Rscript
 # args = commandArgs(trailingOnly=TRUE)
 
-args <- c(44,100)
+args <- c(44, 100)
 
 library(dplyr)
 library(purrr)
@@ -16,16 +16,18 @@ library(pryr)
 
 source("R/ingest_run_rsofun.R")
 
-reduce_mem <- TRUE
+reduce_mem <- FALSE
 n_reduce <- 9
 
 ## read sites data frame
 df_sites <- read_csv("~/leafnp/data/df_sites.csv") %>%
-  mutate(idx = 1:n())
+  mutate(idx = 1:n()) %>% 
+  mutate(chunk = rep(1:as.integer(args[2]), each = (nrow(.)/as.integer(args[2])), len = nrow(.)))
 
 ## split sites data frame into (almost) equal chunks
-nsites_per_chunk <- nrow(df_sites)/as.integer(args[2])
-list_df_split <- split(df_sites, seq(nrow(df_sites)) %/% nsites_per_chunk)
+list_df_split <- df_sites %>% 
+  group_by(chunk) %>% 
+  group_split()
 
 # ## test
 # df_test <- list_df_split %>% bind_rows()
@@ -44,16 +46,18 @@ filn <- paste0("data/df_pmodel_ichunk_", args[1], "_", args[2], ".RData")
 if (!file.exists(filn)){
   if (reduce_mem){
     
-    ## split into four chunks
+    ## split into chunks
     nsites_per_chunk <- nrow(df_sites_sub)/n_reduce
     list_df_split <- split(df_sites_sub, seq(nrow(df_sites_sub)) %/% nsites_per_chunk)
     
     df_pmodel <- tibble()
     for (idx in seq(n_reduce)){
-      df_sites_sub_sub <- list_df_split[[idx]]
+      print("------------------------------------")
+      print(paste("Sub-chunk", idx))
+      print("------------------------------------")
       df_pmodel <- bind_rows(
         df_pmodel,
-        ingest_run_rsofun(df_sites_sub_sub, ichunk = args[1], totchunk = args[2], subchunk = idx, verbose = FALSE)
+        ingest_run_rsofun(list_df_split[[idx]], ichunk = args[1], totchunk = args[2], subchunk = idx, verbose = FALSE)
       )
     }
     save(df_pmodel, file = filn)

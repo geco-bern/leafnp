@@ -5,9 +5,10 @@ ingest_run_rsofun <- function(siteinfo, ichunk = "X", totchunk = "XX", subchunk 
   ## complement siteinfo with WHC based on S_CWDX80
   filn <- "~/data/mct_data/cwdx80.nc"
   siteinfo <- siteinfo %>% 
-    left_join(rbeni::extract_pointdata_allsites(filn, df_lonlat = dplyr::select(siteinfo, sitename, lon, lat)) %>% 
-                setNames(c("whc", "lon", "lat")),
-              by = c("lon", "lat")
+    left_join(rbeni::extract_nc(dplyr::select(siteinfo, sitename, lon, lat), filn) %>% 
+                unnest(data) %>% 
+                rename(whc = V1),
+              by = c("sitename", "lon", "lat")
               )
   
   ## fill gaps in whc
