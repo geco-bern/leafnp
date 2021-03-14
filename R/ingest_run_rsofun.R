@@ -53,7 +53,23 @@ ingest_run_rsofun <- function(siteinfo, ichunk = "X", totchunk = "XX", subchunk 
       is.nan() %>% 
       any()
     
-    if (problem_prec || problem_vpd || problem_ppfd){
+    problem_na_prec <- ddf_watch %>% 
+      unnest(data) %>% 
+      pull(prec) %>% 
+      is.na() %>% 
+      any()
+    problem_na_ppfd <- ddf_watch %>% 
+      unnest(data) %>% 
+      pull(ppfd) %>% 
+      is.na() %>% 
+      any()
+    problem_na_vpd <- ddf_watch %>% 
+      unnest(data) %>% 
+      pull(vpd) %>% 
+      is.na() %>% 
+      any()
+    
+    if (problem_prec || problem_vpd || problem_ppfd || problem_na_prec || problem_na_vpd || problem_na_ppfd){
       ddf_watch <- ingest(
         siteinfo = siteinfo,
         source    = "watch_wfdei",
