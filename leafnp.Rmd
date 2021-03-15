@@ -313,11 +313,11 @@ Get and save data.
 
 ```{r}
 df_soilgrids <- ingest(
-  df_sites,
+  df_sites %>% slice(1:10),
   source    = "soilgrids",
   settings  = settings_soilgrids
   ) %>% 
-  unnsest(data)  # to get a normal flat table
+  unnest(data)  # to get a normal flat table
 
 save(df_soilgrids, file = "data/df_soilgrids.RData")
 ```

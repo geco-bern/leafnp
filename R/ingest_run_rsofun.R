@@ -99,6 +99,29 @@ ingest_run_rsofun <- function(siteinfo, ichunk = "X", totchunk = "XX", subchunk 
     
   } else {
     load(path_cru)
+    
+    ## check if any precip data is nan. if so, run ingestr again after it has been bugfixed.
+    problem <- ddf_cru %>% 
+      unnest(data) %>% 
+      pull(ccov) %>% 
+      is.nan() %>% 
+      any()
+    problem_na <- ddf_cru %>% 
+      unnest(data) %>% 
+      pull(ccov) %>% 
+      is.na() %>% 
+      any()
+
+    if (problem || problem_na){
+      ddf_cru <- ingest(
+        siteinfo = siteinfo,
+        source    = "cru",
+        getvars   = "ccov",
+        dir       = "~/data/cru/ts_4.01/"  # adjust this with your local path
+      )
+      save(ddf_cru, file = path_cru)
+    }
+    
   }
   
   ddf_meteo <- ddf_watch %>% 

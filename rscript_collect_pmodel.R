@@ -2,11 +2,15 @@ library(tidyverse)
 
 open_pmodel <- function(ichunk){
   path <- paste0("data/df_pmodel_ichunk_", ichunk, "_100.RData")
-  load(path)
-  return(df_pmodel)
+  if (file.exists(path)){
+    load(path)
+    return(df_pmodel)
+  } else {
+    return(tibble())
+  }
 }
 
-df <- purrr::map_dfr(as.list(seq(3)),
+df <- purrr::map_dfr(as.list(seq(100)),
                      ~open_pmodel(.))
 
 write_csv(df, file = "data/df_pmodel.csv")
