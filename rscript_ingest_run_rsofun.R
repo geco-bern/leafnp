@@ -1,7 +1,7 @@
 #!/usr/bin/env Rscript
-# args = commandArgs(trailingOnly=TRUE)
+args = commandArgs(trailingOnly=TRUE)
 
-args <- c(83, 100)
+# args <- c(83, 100)
 
 library(dplyr)
 library(purrr)
@@ -17,7 +17,7 @@ library(pryr)
 # source("R/ingest_run_rsofun.R")
 
 ## read sites data frame
-df_sites <- read_csv("~/leafnp/data/df_sites.csv") %>%
+df_sites <- read_csv("data/df_sites_leafnp.csv") %>%
   mutate(idx = 1:n()) %>%
   mutate(chunk = rep(1:as.integer(args[2]), each = (nrow(.)/as.integer(args[2])), len = nrow(.)))
 

@@ -13,4 +13,4 @@ open_pmodel <- function(ichunk){
 df <- purrr::map_dfr(as.list(seq(100)),
                      ~open_pmodel(.))
 
-write_csv(df, file = "data/df_pmodel.csv")
+write_csv(df, file = "data/df_pmodel_leafnp.csv")
