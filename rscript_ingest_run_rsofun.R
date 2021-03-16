@@ -41,7 +41,7 @@ print(df_sites_sub$idx)
 ##------------------------------------------------------------------------
 filn <- paste0("data/df_pmodel_ichunk_", args[1], "_", args[2], ".RData")
 if (!file.exists(filn)){
-  df_pmodel <- ingest_run_rsofun(df_sites_sub, ichunk = args[1], totchunk = args[2], subchunk = "", verbose = FALSE)
+  df_pmodel <- ingest_run_rsofun(df_sites_sub, ichunk = args[1], totchunk = args[2], verbose = FALSE)
   save(df_pmodel, file = filn)
 } else {
   print(paste("File exists already: ", filn))
