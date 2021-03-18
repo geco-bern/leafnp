@@ -58,6 +58,7 @@ df_tmp <- df %>%
   distinct(lon, lat) %>% 
   mutate(sitename = paste0("i", seq(nrow(.))))
 
+## extract elevation data from etopo1
 df_etopo <- ingest(
   df_tmp,
   source = "etopo1",
@@ -68,8 +69,10 @@ df_etopo <- ingest(
   ## add it again so it has lon and lat
   right_join(df_tmp, by = "sitename") %>% 
   ungroup() %>% 
-  dplyr::select(elv_etopo = elv, -sitename)
+  rename(elv_etopo = elv) %>% 
+  dplyr::select(-sitename)
   
+## add etopo elevation data to data frame
 df <- df %>% 
   left_join(df_etopo, by = c("lon", "lat")) %>% 
   rowwise() %>% 
@@ -98,7 +101,8 @@ df_sites <- df %>% dplyr::select(sitename, year_start, year_end) %>%
             year_end   = max(year_end, na.rm = TRUE)) %>% 
   right_join(df_sites, by = "sitename")
 
-write_csv(df_sites, file = "data/df_sites.csv")
+write_csv(df_sites, file = "~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/df_sites_leafnp.csv")
+write_csv(df_sites, file = "data/df_sites_leafnp.csv")
 ```
 
 ## Data overview
@@ -164,57 +168,57 @@ plot_map_simpl() +
   geom_point(data = df_sites, aes(x = lon, y = lat), color = "red", size = 0.3)
 ```
 
-## Identify cells
+<!-- ## Identify cells -->
 
-Based on half-degree global grid. ACTUALLY NOT NEEDED.
+<!-- Based on half-degree global grid. ACTUALLY NOT NEEDED. -->
 
-```{r eval=FALSE}
-## bin to half-degree gridcells for determining climate forcing
-dlon <- 2
-dlat <- 2
-lon_breaks <- seq(from = floor(min(df_sites$lon)), to = ceiling(max(df_sites$lon)), by = dlon)
-lat_breaks <- seq(from = floor(min(df_sites$lat)), to = ceiling(max(df_sites$lat)), by = dlat)
+<!-- ```{r eval=FALSE} -->
+<!-- ## bin to half-degree gridcells for determining climate forcing -->
+<!-- dlon <- 2 -->
+<!-- dlat <- 2 -->
+<!-- lon_breaks <- seq(from = floor(min(df_sites$lon)), to = ceiling(max(df_sites$lon)), by = dlon) -->
+<!-- lat_breaks <- seq(from = floor(min(df_sites$lat)), to = ceiling(max(df_sites$lat)), by = dlat) -->
 
-df_sites <- df_sites %>%
-  ungroup() %>% 
-  mutate(ilon = cut(lon, 
-                    breaks = lon_breaks
-                    ),
-         ilat = cut(lat, 
-                    breaks = lat_breaks
-                    )
-         ) %>% 
-  mutate(lon_lower = as.numeric( sub("\\((.+),.*", "\\1", ilon)),
-         lon_upper = as.numeric( sub("[^,]*,([^]]*)\\]", "\\1", ilon) ),
-         lat_lower = as.numeric( sub("\\((.+),.*", "\\1", ilat) ),
-         lat_upper = as.numeric( sub("[^,]*,([^]]*)\\]", "\\1", ilat) )
-         ) %>% 
-  mutate(lon_mid = (lon_lower + lon_upper)/2,
-         lat_mid = (lat_lower + lat_upper)/2) %>% 
-  
-  ## create cell name to associate with climate input
-  mutate(cellname = paste0("icell_", as.character(lon_mid), "_", as.character(lat_mid))) %>% 
-  dplyr::select(-ilon, -ilat, -lon_lower, -lon_upper, -lat_lower, -lat_upper)
+<!-- df_sites <- df_sites %>% -->
+<!--   ungroup() %>%  -->
+<!--   mutate(ilon = cut(lon,  -->
+<!--                     breaks = lon_breaks -->
+<!--                     ), -->
+<!--          ilat = cut(lat,  -->
+<!--                     breaks = lat_breaks -->
+<!--                     ) -->
+<!--          ) %>%  -->
+<!--   mutate(lon_lower = as.numeric( sub("\\((.+),.*", "\\1", ilon)), -->
+<!--          lon_upper = as.numeric( sub("[^,]*,([^]]*)\\]", "\\1", ilon) ), -->
+<!--          lat_lower = as.numeric( sub("\\((.+),.*", "\\1", ilat) ), -->
+<!--          lat_upper = as.numeric( sub("[^,]*,([^]]*)\\]", "\\1", ilat) ) -->
+<!--          ) %>%  -->
+<!--   mutate(lon_mid = (lon_lower + lon_upper)/2, -->
+<!--          lat_mid = (lat_lower + lat_upper)/2) %>%  -->
 
-write_csv(df_sites, file = "data/df_sites.csv")
+<!--   ## create cell name to associate with climate input -->
+<!--   mutate(cellname = paste0("icell_", as.character(lon_mid), "_", as.character(lat_mid))) %>%  -->
+<!--   dplyr::select(-ilon, -ilat, -lon_lower, -lon_upper, -lat_lower, -lat_upper) -->
 
-df_cells <- df_sites %>% 
-  dplyr::select(cellname, lon_mid, lat_mid) %>% 
-  distinct()
+<!-- write_csv(df_sites, file = "data/df_sites_leafnp.csv") -->
 
-write_csv(df_cells, file = "data/df_cells.csv")
-```
+<!-- df_cells <- df_sites %>%  -->
+<!--   dplyr::select(cellname, lon_mid, lat_mid) %>%  -->
+<!--   distinct() -->
 
-```{r}
-## sample one site per cell
-df_sites_sampled <- df_sites %>% 
-  dplyr::select(sitename, lon, lat, elv, cellname) %>%
-  group_by(cellname) %>% 
-  sample_n(1)
-  
-plot_map_simpl() +
-  geom_point(data = df_sites_sampled, aes(x = lon, y = lat), color = "red", size = 0.3)
-```
+<!-- write_csv(df_cells, file = "data/df_cells_leafnp.csv") -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- ## sample one site per cell -->
+<!-- df_sites_sampled <- df_sites %>%  -->
+<!--   dplyr::select(sitename, lon, lat, elv, cellname) %>% -->
+<!--   group_by(cellname) %>%  -->
+<!--   sample_n(1) -->
+
+<!-- plot_map_simpl() + -->
+<!--   geom_point(data = df_sites_sampled, aes(x = lon, y = lat), color = "red", size = 0.3) -->
+<!-- ``` -->
 
 ## Complement dataset
 
@@ -223,45 +227,13 @@ plot_map_simpl() +
 -   Complement dataset with data points where only Nmass or only Pmass is available (no strict requirement to have paired Nmass and Pmass for this analysis).
 -   Information about species identity, family, genus
 
-### Climate indeces
+### P-model outputs and climate indeces
 
-PET must be read separately. It's available from SOFUN outputs. Extract time series and add to `ddf_watch`.
-
+The script `rscript_ingest_run_rsofun.R` is used to collect forcing data and run P-model simulations for all sites (N = 2149). Outputs are aggregated by site (annual mean of Vcmax25 and Jmax25, weighted by daily GPP). This also runs the function `R/calc_climate_index.R` on collected climate forcing data to return climate indeces (some of which are complementary to what is collected directly from WorldClim). The output is on Euler and is read here.
 ```{r}
-rbeni::extract_pointdata_allsites(
-  filename = "~/data/sofun_outputs/global_FULL_MODIS-C006_MOD15A2_v1.4-12-g1b77a9e/global_FULL_MODIS-C006_MOD15A2_v1.4-12-g1b77a9e.a.pet_MEANANN.nc",
-  df_lonlat = df_sites %>% slice(1:3))
+df_pmodel <- read_csv("~/data/LeafNP_tiandi/df_pmodel_leafnp.csv")
 ```
 
-This is how it can be done.
-
-```{r}
-## ddf_watch must be a flat data frame (not nested)
-## functions to calculate all climate indexes are implemented here:
-source("R/calc_climate_index.R")
-
-## test: use just data for two sites
-testcells <- unique(ddf_watch$sitename)[1:2]
-
-df_climate_ind <- ddf_watch %>% 
-  dplyr::filter(sitename %in% testcells) %>% 
-  group_by(sitename) %>% 
-  nest() %>% 
-  mutate(mat = purrr::map(data, ~calc_climate_index_mat(.)),
-         matgs = purrr::map(data, ~calc_climate_index_matgs(., temp_base = 5.0)),
-         tmonthmin = purrr::map(data, ~calc_climate_index_tmonthmin(.)),
-         tmonthmax = purrr::map(data, ~calc_climate_index_tmonthmax(.)),
-         ndaysgs = purrr::map(data, ~calc_climate_index_ndaysgs(., temp_base = 5.0)),
-         mai = purrr::map(data, ~calc_climate_index_mai(.)),
-         maigs = purrr::map(data, ~calc_climate_index_maigs(., temp_base = 5.0)),
-         map = purrr::map(data, ~calc_climate_index_map(.)),
-         pmonthmin = purrr::map(data, ~calc_climate_index_pmonthmin(.)),
-         mapgs = purrr::map(data, ~calc_climate_index_mapgs(., temp_base = 5.0)),
-         mavgs = purrr::map(data, ~calc_climate_index_mavgs(., temp_base = 5.0)),
-         mav = purrr::map(data, ~calc_climate_index_mav(.))) %>% 
-  dplyr::select(-data) %>% 
-  unnest(c(mat, matgs, tmonthmin, tmonthmax, ndaysgs, mai, maigs, map, pmonthmin, mapgs, mavgs, mav))
-```
 
 ### HWSD Soil
 
@@ -313,11 +285,11 @@ Get and save data.
 
 ```{r}
 df_soilgrids <- ingest(
-  df_sites,
+  df_sites %>% slice(1:10),
   source    = "soilgrids",
   settings  = settings_soilgrids
   ) %>% 
-  unnsest(data)  # to get a normal flat table
+  unnest(data)  # to get a normal flat table
 
 save(df_soilgrids, file = "data/df_soilgrids.RData")
 ```

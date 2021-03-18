@@ -1,4 +1,4 @@
-ingest_run_rsofun <- function(siteinfo, ichunk = "X", totchunk = "XX", subchunk = "", verbose = FALSE){
+ingest_run_rsofun <- function(siteinfo, ichunk = "X", totchunk = "XX", verbose = FALSE){
   
   source("R/calc_climate_index.R")
   
@@ -16,7 +16,7 @@ ingest_run_rsofun <- function(siteinfo, ichunk = "X", totchunk = "XX", subchunk 
   siteinfo <- siteinfo %>% 
     mutate(whc = ifelse(is.na(whc), whc_median, whc))
   
-  path_watch <- paste0("data/ddf_watch_chunk", as.character(subchunk), "_", as.character(ichunk), "_", as.character(totchunk), ".RData")
+  path_watch <- paste0("data/ddf_watch_chunk_", as.character(ichunk), "_", as.character(totchunk), ".RData")
   if (!file.exists(path_watch)){
     
     out_mem <- pryr::mem_change(
@@ -82,7 +82,7 @@ ingest_run_rsofun <- function(siteinfo, ichunk = "X", totchunk = "XX", subchunk 
     
   }
   
-  path_cru <- paste0("data/ddf_cru_chunk", as.character(subchunk), "_", as.character(ichunk), "_", as.character(totchunk), ".RData")
+  path_cru <- paste0("data/ddf_cru_chunk_", as.character(ichunk), "_", as.character(totchunk), ".RData")
   if (!file.exists(path_cru)){
     
     out_mem <- pryr::mem_change(
@@ -99,6 +99,29 @@ ingest_run_rsofun <- function(siteinfo, ichunk = "X", totchunk = "XX", subchunk 
     
   } else {
     load(path_cru)
+    
+    ## check if any precip data is nan. if so, run ingestr again after it has been bugfixed.
+    problem <- ddf_cru %>% 
+      unnest(data) %>% 
+      pull(ccov) %>% 
+      is.nan() %>% 
+      any()
+    problem_na <- ddf_cru %>% 
+      unnest(data) %>% 
+      pull(ccov) %>% 
+      is.na() %>% 
+      any()
+
+    if (problem || problem_na){
+      ddf_cru <- ingest(
+        siteinfo = siteinfo,
+        source    = "cru",
+        getvars   = "ccov",
+        dir       = "~/data/cru/ts_4.01/"  # adjust this with your local path
+      )
+      save(ddf_cru, file = path_cru)
+    }
+    
   }
   
   ddf_meteo <- ddf_watch %>% 
