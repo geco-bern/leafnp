@@ -1,7 +1,7 @@
 #!/usr/bin/env Rscript
-args = commandArgs(trailingOnly=TRUE)
+# args = commandArgs(trailingOnly=TRUE)
 
-# args <- c(83, 100)
+args <- c(46, 100)
 
 library(dplyr)
 library(purrr)
@@ -14,7 +14,7 @@ library(rsofun)
 library(rbeni)
 library(pryr)
 
-# source("R/ingest_run_rsofun.R")
+source("R/ingest_run_rsofun.R")
 
 ## read sites data frame
 df_sites <- read_csv("data/df_sites_leafnp.csv") %>%
