@@ -229,19 +229,6 @@ plot_map_simpl() +
 -   Complement dataset with data points where only Nmass or only Pmass is available (no strict requirement to have paired Nmass and Pmass for this analysis).
 -   Information about species identity, family, genus
 
-### P-model outputs and climate indeces
-
-The script `rscript_ingest_run_rsofun.R` is used to collect forcing data and run P-model simulations for all sites (N = 2149). Outputs are aggregated by site (annual mean of Vcmax25 and Jmax25, weighted by daily GPP). This also runs the function `R/calc_climate_index.R` on collected climate forcing data to return climate indeces (some of which are complementary to what is collected directly from WorldClim). The output is on Euler and is read here.
-```{r}
-read_pmodel <- function(path){
-  load(path)
-  return(df_pmodel)
-}
-df_pmodel <- purrr::map_dfr(as.list(list.files("data", pattern = "df_pmodel.*.RData", full.names = TRUE)),
-                            ~read_pmodel(.))
-```
-
-
 ### HWSD Soil
 
 Read HWSD for each site. This reads all variables available fro HWSD. Select relevant variables in a separate step.
@@ -262,19 +249,17 @@ if (!file.exists(filn)){
     mutate(n_row = purrr::map_int(data, ~nrow(.))) %>% 
     mutate(data = purrr::map(data, ~slice(., 1)))
   
+  df_hwsd <- df_hwsd %>% 
+    dplyr::select(-n_row) %>% 
+    unnest(data) %>% 
+    dplyr::select(sitename, T_BULK_DENSITY, AWC_CLASS, T_CLAY, T_SILT, T_SAND, T_GRAVEL, T_PH_H2O, T_TEB, T_BS, T_CEC_SOIL, T_CEC_CLAY, T_ECE, T_ESP, T_CACO3, T_OC)
+  
   save(df_hwsd, file = filn)
   
 } else {
   load(filn)
 }
 ```
-
-Keep only interesting columns.
-```{r}
-df_hwsd <- df_hwsd %>% 
-    mutate(data = purrr::map(data, ~dplyr::select(., T_BULK_DENSITY, AWC_CLASS, T_CLAY, T_SILT, T_SAND, T_GRAVEL, T_PH_H2O, T_TEB, T_BS, T_CEC_SOIL, T_CEC_CLAY, T_ECE, T_ESP, T_CACO3, T_OC)))
-```
-
 
 ### WISE30sec Soil
 
@@ -285,18 +270,14 @@ settings_wise <- get_settings_wise(
   varnam = c("ORGC", "TOTN", "CNrt", "ALSA"),
   layer = 1:2
   )
-```
 
-Get and save data.
-
-```{r}
 df_wise <- ingest(
   df_sites,
   source    = "wise",
   settings  = settings_wise,
   dir       = "~/data/soil/wise"
   ) %>% 
-  unnsest(data)  # to get a normal flat table
+  unnest(data)  # to get a normal flat table
 
 save(df_wise, file = "data/df_wise_20210324.RData")
 ```
@@ -308,13 +289,9 @@ Define all variables to be extracted from GSDE. This is not using ingestr.
 
 ```{r}
 settings_gsde <- list(varnam = c("PBR", "PHO", "TP", "TK", "TS"), layer = 1:8)
-```
 
-Get and save data.
-
-```{r}
 df_gsde <- ingest(
-  df_sites,
+  df_sites %>% slice(1:3),
   source    = "gsde",
   settings  = settings_gsde,
   dir       = "~/data/soil/shangguan"
@@ -393,10 +370,13 @@ Read N deposition from Lamarque et al. (2011) as NOx and NOy in gN m$^{-2}$ yr$^
 filn <- "data/df_ndep_20210324.RData"
 if (!file.exists(filn)){
   df_ndep <- ingest(
-    df_sites,    
+    df_sites %>% 
+      mutate(year_start = ifelse(year_start > 2009, 2009, year_start),
+             year_end = ifelse(year_end > 2009, 2009, year_end)),    
     source    = "ndep",
     timescale = "y",
     dir       = "~/data/ndep_lamarque/",
+    getvars   = c("nhx", "noy"),
     verbose   = FALSE
     )
   save(df_ndep, file = filn)
@@ -409,11 +389,33 @@ df_ndep_agg <- df_ndep %>%
   mutate(data = purrr::map(data, ~mutate(., ndep = noy + nhx))) %>% 
   mutate(data = purrr::map(data, ~summarise(., ndep = mean(ndep, na.rm = TRUE)))) %>% 
   unnest(data)
+
+save(df_ndep_agg, file = "data/df_ndep_20210324.RData")
 ```
+
+### P-model outputs and climate indeces
+
+The script `rscript_ingest_run_rsofun.R` is used to collect forcing data and run P-model simulations for all sites (N = 2149). Outputs are aggregated by site (annual mean of Vcmax25 and Jmax25, weighted by daily GPP). This also runs the function `R/calc_climate_index.R` on collected climate forcing data to return climate indeces (some of which are complementary to what is collected directly from WorldClim). The output is on Euler and is read here.
+```{r}
+read_pmodel <- function(path){
+  load(path)
+  return(df_pmodel)
+}
+df_pmodel <- purrr::map_dfr(as.list(list.files("data", pattern = "df_pmodel.*.RData", full.names = TRUE)),
+                            ~read_pmodel(.))
+```
+
 
 ### Combine all data
 
 ```{r}
+load("data/df_ndep_20210324.RData") # loads df_ndep_agg
+load("data/df_co2_20210324.RData") # df_co2
+load("data/df_gti_20210324.RData") # loads df_gti
+load("data/df_gsde_20210324.RData") # df_gsde
+load("data/df_wise_20210324.RData") # df_wise
+load("data/df_hwsd_20210324.RData") # df_hwsd
+
 ## data prepared by di
 df_soil <- read_csv("~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/soil_property_extraction_20210323/lobal_leaf_NP_with_soil_property_from_HWSD_WISE_GSDE_23032021.csv")
 
