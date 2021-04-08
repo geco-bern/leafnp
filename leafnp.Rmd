@@ -234,7 +234,7 @@ plot_map_simpl() +
 Read HWSD for each site. This reads all variables available fro HWSD. Select relevant variables in a separate step.
 
 ```{r eval=FALSE}
-# df_sites <- write_csv("data/df_sites_leafnp_20210324.csv")
+# df_sites <- read_csv("data/df_sites_leafnp_20210324.csv")
 
 filn <- "data/df_hwsd_20210324.RData"
 if (!file.exists(filn)){
@@ -288,16 +288,19 @@ save(df_wise, file = "data/df_wise_20210324.RData")
 Define all variables to be extracted from GSDE. This is not using ingestr.
 
 ```{r}
-settings_gsde <- list(varnam = c("PBR", "PHO", "TP", "TK", "TS"), layer = 1:8)
+df_sites <- read_csv("data/df_sites_leafnp_20210324.csv")
+
+settings_gsde <- list(varnam = "TP", layer = 1:8)  # c("PBR", "PHO", "TP", "TK", "TS")
 
 df_gsde <- ingest(
-  df_sites %>% slice(1:3),
+  df_sites,
   source    = "gsde",
   settings  = settings_gsde,
   dir       = "~/data/soil/shangguan"
-  )
+  ) %>% 
+  unnest(data)
 
-save(df_gsde, file = "data/df_gsde_20210324.RData")
+#save(df_gsde, file = "data/df_gsde_20210324.RData")
 ```
 
 
@@ -406,7 +409,7 @@ df_pmodel <- purrr::map_dfr(as.list(list.files("data", pattern = "df_pmodel.*.RD
 ```
 
 
-### Combine all data
+## Combine all data
 
 ```{r}
 load("data/df_ndep_20210324.RData") # loads df_ndep_agg
@@ -416,10 +419,51 @@ load("data/df_gsde_20210324.RData") # df_gsde
 load("data/df_wise_20210324.RData") # df_wise
 load("data/df_hwsd_20210324.RData") # df_hwsd
 
+df <- read_csv("~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/global_leaf_NP_total_Di_20210324_PROC.csv")
+
+df_my <- df %>% 
+  left_join(df_wise, by = "sitename") %>% 
+  left_join(df_hwsd, by = "sitename") %>% 
+  left_join(df_gti %>% dplyr::select(-year_start, -year_end, -elv, -lon, -lat), by = "sitename") %>% 
+  left_join(df_ndep_agg, by = "sitename") %>% 
+  left_join(df_co2, by = "sitename") %>% 
+  left_join(df_pmodel, by = "sitename")
+
 ## data prepared by di
-df_soil <- read_csv("~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/soil_property_extraction_20210323/lobal_leaf_NP_with_soil_property_from_HWSD_WISE_GSDE_23032021.csv")
+df_di <- read_csv("~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/soil_property_extraction_20210323/global_leaf_NP_with_soil_property_from_HWSD_WISE_GSDE_23032021.csv")
 
+## add my extractions to di's soil stuff
+df_di <- df_di %>% 
+  left_join(df_gti %>% dplyr::select(-year_start, -year_end, -elv, -lon, -lat), by = "sitename") %>% 
+  left_join(df_ndep_agg, by = "sitename") %>% 
+  left_join(df_co2, by = "sitename") %>% 
+  left_join(df_pmodel, by = "sitename")
 
+write_csv(df_di, "~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/soil_property_extraction_20210323/global_leaf_NP_with_soil_property_from_HWSD_WISE_GSDE_Pmodel_Ndep_GTI_CO2_25032021.csv")  
+
+dim(df_my)
+dim(df_di)
+dim(df)
+
+names(df_my)
+
+## are my extractions and the one of di the same?
+## yes
+df_my %>% 
+  dplyr::select(sitename, T_CACO3_beni = T_CACO3) %>% 
+  left_join(dplyr::select(df_di, sitename, T_CACO3_di = T_CACO3), by = "sitename") %>% 
+  rbeni::analyse_modobs2("T_CACO3_beni", "T_CACO3_di", type = "hex")
+
+## yes
+df_my %>% 
+  dplyr::select(sitename, T_PH_H2O_beni = T_PH_H2O) %>% 
+  left_join(dplyr::select(df_di, sitename, T_PH_H2O_di = T_PH_H2O), by = "sitename") %>% 
+  rbeni::analyse_modobs2("T_PH_H2O_beni", "T_PH_H2O_di", type = "hex")
+
+df_my %>% 
+  dplyr::select(sitename, CNrt_beni = CNrt) %>% 
+  left_join(dplyr::select(df_di, sitename, CNrt_di = CNrt), by = "sitename") %>% 
+  rbeni::analyse_modobs2("CNrt_beni", "CNrt_di", type = "hex")
 ```
 
 ### Extracting from global NetCDF files
