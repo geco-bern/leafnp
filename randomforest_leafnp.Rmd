@@ -11,6 +11,7 @@ library(ranger)
 library(caret)
 library(visdat)
 library(vip)
+library(pdp)
 ```
 
 ## Read data
@@ -179,7 +180,32 @@ out$gg +
 
 ## Interpret model
 
+Variable importance.
+
 ```{r}
 p1 <- vip(mod_rf_caret_leafn$finalModel, num_features = 45, bar = FALSE)
 p1
+```
+
+Partial dependence:
+```{r}
+pdp_pred <- function(object, newdata){
+  results <- mean(predict(object, newdata))$predictions
+  return(results)
+}
+
+out <- partial(mod_rf_caret_leafn$finalModel, 
+        train = dfs %>% 
+          ungroup() %>% 
+          drop_na() %>% 
+          dplyr::select(leafN, preds),
+        pred.var = "vcmax25",
+        # pred.fun = pdp_pred,
+        grid.resolution = 50
+)
+head(out)
+autoplot(out, rug = TRUE, train = as.data.frame(dfs %>% 
+          ungroup() %>% 
+          drop_na() %>% 
+          dplyr::select(leafN, preds)))
 ```
