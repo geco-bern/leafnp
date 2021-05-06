@@ -123,6 +123,14 @@ tmp <- df %>%
 tmp %>% 
   ggplot(aes(x = count, y = ..count..)) +
   geom_histogram()
+
+## number of data points with species that have at least 30 observations: 23513
+use_species <- tmp %>% 
+  dplyr::filter(count >= 30) %>% 
+  pull(Species)
+df %>% 
+  dplyr::filter(Species %in% use_species) %>% 
+  nrow()
 ```
 
 ### Observations per genus
@@ -290,7 +298,7 @@ Define all variables to be extracted from GSDE. This is not using ingestr.
 ```{r}
 df_sites <- read_csv("data/df_sites_leafnp_20210324.csv")
 
-settings_gsde <- list(varnam = "TP", layer = 1:8)  # c("PBR", "PHO", "TP", "TK", "TS")
+settings_gsde <- list(varnam =  c("PBR", "PHO", "TP", "TK", "TS"), layer = 1:4)
 
 df_gsde <- ingest(
   df_sites,
@@ -300,7 +308,7 @@ df_gsde <- ingest(
   ) %>% 
   unnest(data)
 
-#save(df_gsde, file = "data/df_gsde_20210324.RData")
+save(df_gsde, file = "data/df_gsde_20210408.RData")
 ```
 
 
