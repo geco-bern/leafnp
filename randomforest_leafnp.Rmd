@@ -1,0 +1,249 @@
+---
+title: "Random Forest for leafnp"
+author: "Beni Stocker"
+date: "5/6/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(ranger)
+library(caret)
+library(visdat)
+library(vip)
+library(pdp)
+library(nnet)
+```
+
+## Read data
+
+```{r}
+df <- read_csv("~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/soil_property_extraction_20210323/global_leaf_NP_with_soil_property_from_HWSD_WISE_GSDE_Pmodel_Ndep_GTI_CO2_25032021.csv")
+
+trgts <- c("leafN", "leafP", "LeafNP")
+preds <- c("ORGC",  "TOTN",  "CNrt",  "ALSA",  "elv", "AWC_CLASS", "T_GRAVEL",  "T_SAND",  "T_SILT",  "T_CLAY",  "T_REF_BULK_DENSITY",  "T_BULK_DENSITY",  "T_OC",  "T_PH_H2O", "T_CEC_CLAY",  "T_CEC_SOIL",  "T_BS",  "T_TEB",  "T_CACO3",  "T_ESP",  "T_ECE",  "PBR", "PHH2O",  "gti",  "ndep",  "co2",  "mat",  "matgs",  "tmonthmin",  "tmonthmax", "ndaysgs",  "mai",  "maigs",  "map",  "pmonthmin",  "mapgs",  "mavgs",  "mav", "alpha",  "vcmax25",  "jmax25",  "gs_accl",  "aet",  "ai",  "cwdx80")
+```
+
+Take site means.
+```{r}
+dfs <- df %>% 
+  mutate(elv_grp = elv) %>% 
+  group_by(lon, lat, elv_grp, sitename) %>% 
+  summarise(across(c(preds, trgts), ~(mean(.x, na.rm = TRUE)))) %>% 
+  left_join(df %>% 
+              group_by(sitename) %>% 
+              summarise(nobs = n()),
+            by = "sitename")
+```
+
+Visualise missing data.
+```{r}
+vis_miss(dfs)
+```
+There are a lot of data points still missing, especially for HWSD data and PFB, and also alpha. Am I using the latest updated dataset? 
+
+Use only data from sites with at least three observations. Reduces it from 7545 to 2200 points.
+```{r}
+# dfs <- dfs %>% 
+#   dplyr::filter(nobs >= 3)
+```
+
+
+## Train a model
+
+### Ranger
+
+A random forest model using the ranger library.
+
+Out of the box, it gets R2 = 0.47.
+
+```{r}
+mod_rf_leafn <- ranger(
+  leafN ~ ., 
+  data = dfs %>% 
+    drop_na() %>% 
+    dplyr::select(leafN, preds),
+  mtry = floor(length(preds) / 3),
+  respect.unordered.factors = "order",
+  seed = 123
+)
+
+## RMSE and R2
+sqrt(mod_rf_leafn$prediction.error)
+mod_rf_leafn$r.squared
+```
+
+With hyperparameter tuning according to [this](https://bradleyboehmke.github.io/HOML/random-forest.html).
+```{r}
+# create hyperparameter grid
+hyper_grid <- expand.grid(
+  mtry = floor(length(preds) * c(.1, .15, .25, .333, .4)),
+  min.node.size = c(3, 5, 10), 
+  replace = c(TRUE, FALSE),                               
+  sample.fraction = c(.5, .7, .8),                       
+  rmse = NA                                               
+)
+
+# execute full cartesian grid search
+for(i in seq_len(nrow(hyper_grid))) {
+  # fit model for ith hyperparameter combination
+  fit <- ranger(
+    formula         = leafN ~ ., 
+    data = dfs %>% 
+      ungroup() %>% 
+      drop_na() %>% 
+      dplyr::select(leafN, preds),
+    num.trees       = length(preds) * 10,
+    mtry            = hyper_grid$mtry[i],
+    min.node.size   = hyper_grid$min.node.size[i],
+    replace         = hyper_grid$replace[i],
+    sample.fraction = hyper_grid$sample.fraction[i],
+    verbose         = FALSE,
+    seed            = 123,
+    respect.unordered.factors = 'order',
+  )
+  # export OOB error 
+  hyper_grid$rmse[i] <- sqrt(fit$prediction.error)
+}
+
+# assess top 10 models
+hyper_grid %>%
+  arrange(rmse) %>%
+  head(10)
+
+## save the best combination
+best_hyper <- hyper_grid %>% 
+  arrange(rmse) %>% 
+  slice(1)
+```
+
+### Caret Random Forest
+
+Using the caret library with hyperparameter based on best results from above. This is useful to get CV results.
+```{r}
+traincotrlParams <- trainControl( 
+  method="cv", 
+  number=5, 
+  verboseIter=FALSE,
+  savePredictions = "final"
+  )
+
+tune_grid <- expand.grid( .mtry = best_hyper$mtry, 
+                          .min.node.size = best_hyper$min.node.size,
+                          .splitrule = "variance"
+                          ) 
+
+set.seed(1982)
+
+mod_rf_caret_leafn <- train(
+  leafN ~ .,
+  data = dfs %>% 
+    ungroup() %>% 
+    drop_na() %>% 
+    dplyr::select(leafN, preds),
+  metric    = "RMSE",
+  method    = "ranger",
+  tuneGrid  = tune_grid,
+  trControl = traincotrlParams,
+  replace = best_hyper$replace,
+  sample.fraction = best_hyper$sample.fraction,
+  na.action = na.omit,
+  num.trees = 2000,         # boosted for the final model
+  importance = "impurity"   # for variable importance analysis, alternative: "permutation"
+  )
+```
+
+Visualise cross-validation results using results from the best tuned model.
+```{r}
+## get predicted values from cross-validation resamples, take mean across repetitions
+df_cv <- mod_rf_caret_leafn$pred %>% 
+  as_tibble() %>% 
+  dplyr::filter(mtry == mod_rf_caret_leafn$bestTune$mtry, 
+                splitrule == mod_rf_caret_leafn$bestTune$splitrule, 
+                min.node.size == mod_rf_caret_leafn$bestTune$min.node.size) %>%
+  mutate(fold = as.integer(stringr::str_remove(Resample, "Fold"))) %>% 
+  dplyr::rename(idx = rowIndex) %>% 
+  left_join(
+    dfs %>% 
+      ungroup() %>% 
+      drop_na() %>% 
+      dplyr::select(leafN) %>% 
+      mutate(idx = seq(nrow(.))),
+    by = "idx"
+    ) %>% 
+  dplyr::select(obs = leafN, mod = pred)
+
+out <- df_cv %>% 
+  rbeni::analyse_modobs2("mod", "obs", type = "heat")
+out$gg +
+  ylim(5,40) + xlim(5,40)
+```
+
+### Caret Neural Network
+
+XXX Doesn't work well. XXX
+
+Using the caret library with hyperparameter based on best results from above. This is useful to get CV results.
+```{r}
+traincotrlParams <- trainControl( 
+  method="cv", 
+  number=5, 
+  verboseIter=FALSE,
+  savePredictions = "final"
+  )
+
+tune_grid <- expand.grid( .size = c(12,15,20), 
+                          .decay = c(0.1, 0.05, 0.01, 0.005)
+                          ) 
+
+set.seed(1982)
+
+mod_nn_caret_leafn <- train(
+  leafN ~ .,
+  data = dfs %>% 
+    ungroup() %>% 
+    drop_na() %>% 
+    dplyr::select(leafN, preds),
+  metric    = "RMSE",
+  method    = "nnet",
+  preProc   = c("center", "scale"),
+  tuneGrid  = tune_grid,
+  trControl = traincotrlParams,
+  na.action = na.omit,
+  trace     = FALSE
+  )
+mod_rf_caret_leafn
+mod_rf_caret_leafn$finalModel
+```
+
+## Interpret model
+
+Variable importance.
+
+```{r}
+p1 <- vip(mod_rf_caret_leafn$finalModel, num_features = 45, bar = FALSE)
+p1
+```
+
+Partial dependence:
+```{r}
+pdp_pred <- function(object, newdata){
+  results <- mean(predict(object, newdata))$predictions
+  return(results)
+}
+
+out <- partial(mod_rf_caret_leafn$finalModel, 
+        train = dfs %>% 
+          ungroup() %>% 
+          drop_na() %>% 
+          dplyr::select(leafN, preds),
+        pred.var = "vcmax25",
+        # pred.fun = pdp_pred,
+        grid.resolution = 50
+)
+head(out)
+autoplot(out, rug = TRUE, train = as.data.frame(dfs %>% 
+          ungroup() %>% 
+          drop_na() %>% 
+          dplyr::select(leafN, preds)))
+```

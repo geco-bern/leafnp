@@ -1,0 +1,283 @@
+---
+title: "Leaf N and P analysis"
+author: "Beni Stocker"
+date: "1/6/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(readr)
+library(purrr)
+library(rbeni)
+library(ingestr)
+library(visdat)
+```
+
+## Read data
+
+```{r}
+## original data, no covariates
+df <- read_csv("~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/global_leaf_NP_total_Di_20210702_PROC_ELV.csv")
+
+## sites (unique lon, lat, elv)
+df_sites <- read_csv("~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/df_sites_leafnp_20210702.csv")
+
+## covariates added, but incomplete
+df_cov <- read_csv("~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/update_data_2021July/updated_dataset_20210429.csv")
+``` 
+
+Visualise missing.
+```{r}
+df_cov %>% vis_miss(warn_large_data = FALSE)
+```
+
+Fraction missing per column.
+```{r}
+df_cov %>% 
+  summarise(across(where(is.numeric), ~(sum(is.na(.x)) / length(.x)))) %>% 
+  pivot_longer(cols = 1:ncol(.), names_to = "name", values_to = "value") %>% 
+  dplyr::filter(value > 0)
+```
+
+Problematic `soil_N` and `soil_P` with 88% missing. Not sure where they came from. Did you rename them, Di? 
+I suspect they are from WISE and GSDE.
+
+<!-- ```{r} -->
+<!-- load("data/df_wise_20210324.RData") -->
+<!-- load("data/df_gsde_20210408.RData") -->
+<!-- ``` -->
+
+
+## Complement dataset
+
+### HWSD Soil
+
+Read HWSD for each site. This reads all variables available fro HWSD. Select relevant variables in a separate step.
+
+```{r eval=FALSE}
+filn <- "data/df_hwsd_20210324.RData"
+load(filn)
+```
+
+```{r}
+## small number of data is missing
+vis_miss(df_hwsd)
+```
+
+```{r}
+sites_missing_hwsd <- df_hwsd %>% 
+  dplyr::filter(is.na(T_BULK_DENSITY)) %>%  #  | is.na(T_GRAVEL) | is.na(AWC_CLASS)
+  pull(sitename) %>% 
+  unique()
+
+df_sites_missing <- df_sites %>% 
+  dplyr::filter(sitename %in% sites_missing_hwsd)
+
+plot_map_simpl() +
+  geom_point(data = df_sites_missing, aes(x = lon, y = lat), color = "red", size = 0.3)
+```
+
+Extract again.
+```{r}
+df_hwsd_compl <- ingest(
+  df_sites_missing,
+  source = "hwsd",
+  settings = list(fil = "~/data/hwsd/HWSD_RASTER/hwsd.bil")
+  )
+
+df_hwsd_compl %>% 
+  unnest(data) %>% 
+  vis_miss()
+```
+
+The problem is that the data is just missing for these locations, there is no way to resolve it on "ingestr-side". The fraction of missing data is 0.6%. That's acceptable.
+
+### WISE30sec Soil
+
+Define all variables to be extracted from WISE30sec
+
+```{r}
+load("data/df_wise_20210324.RData")
+```
+
+Practically no missing data (<0.1%).
+```{r}
+vis_miss(df_wise)
+```
+
+### GSDE
+
+```{r}
+load("data/df_gsde_20210408.RData")
+```
+
+Lots of missing data!
+```{r}
+vis_miss(df_gsde)
+```
+
+Map missing data. No particular pattern.
+```{r}
+sites_missing_gsde <- df_gsde %>% 
+  dplyr::filter(is.na(PBR)) %>%  #  | is.na(T_GRAVEL) | is.na(AWC_CLASS)
+  pull(sitename) %>% 
+  unique()
+
+df_sites_missing <- df_sites %>% 
+  dplyr::filter(sitename %in% sites_missing_gsde)
+
+plot_map_simpl() +
+  geom_point(data = df_sites_missing, aes(x = lon, y = lat), color = "red", size = 0.3)
+```
+
+Try extracting again.
+```{r}
+settings_gsde <- list(varnam =  c("PBR"), layer = 1:4)    # , "PHO", "TP", "TK", "TS"
+
+df_gsde_compl <- ingest(
+  df_sites_missing %>% slice(1:3),
+  source    = "gsde",
+  settings  = settings_gsde,
+  dir       = "~/data/soil/shangguan"
+  ) %>% 
+  unnest(data)
+```
+
+
+### Topography index
+
+0.26% missing. Acceptable.
+
+```{r}
+load("data/df_gti_20210324.RData")
+vis_miss(df_gti)
+```
+
+### CO2
+
+No missing.
+
+```{r}
+load("data/df_co2_20210324.RData")
+vis_miss(df_co2)
+```
+
+### Nitrogen deposition
+
+No missing. 
+
+```{r}
+load("data/df_ndep_20210324.RData")
+vis_miss(df_ndep_agg)
+```
+
+### P-model outputs and climate indeces
+
+The script `rscript_ingest_run_rsofun.R` is used to collect forcing data and run P-model simulations for all sites (N = 2149). Outputs are aggregated by site (annual mean of Vcmax25 and Jmax25, weighted by daily GPP). This also runs the function `R/calc_climate_index.R` on collected climate forcing data to return climate indices (some of which are complementary to what is collected directly from WorldClim). The output is on Euler and is read here.
+
+0.2% missing. Acceptable.
+
+```{r}
+read_pmodel <- function(path){
+  load(path)
+  return(df_pmodel)
+}
+df_pmodel <- purrr::map_dfr(as.list(list.files("data", pattern = "df_pmodel.*.RData", full.names = TRUE)),
+                            ~read_pmodel(.))
+
+save(df_pmodel, file = "data/df_pmodel.RData")
+
+vis_miss(df_pmodel)
+```
+
+Large number of data missing for alpha. Unclear why. Resolve it.
+
+
+## Combine all data
+
+```{r}
+load("data/df_ndep_20210324.RData") # loads df_ndep_agg
+load("data/df_co2_20210324.RData") # df_co2
+load("data/df_gti_20210324.RData") # loads df_gti
+load("data/df_gsde_20210408.RData") # df_gsde
+load("data/df_wise_20210324.RData") # df_wise
+load("data/df_hwsd_20210324.RData") # df_hwsd
+
+df <- read_csv("~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/global_leaf_NP_total_Di_20210702_PROC_ELV.csv")
+
+df_my <- df %>% 
+  dplyr::select(-Record_ID, -soil_N, -soil_P) %>% 
+  left_join(df_wise, by = "sitename") %>% 
+  left_join(df_hwsd, by = "sitename") %>% 
+  left_join(df_gti %>% dplyr::select(-year_start, -year_end, -elv, -lon, -lat), by = "sitename") %>% 
+  left_join(df_ndep_agg, by = "sitename") %>% 
+  left_join(df_co2, by = "sitename") %>% 
+  left_join(df_pmodel, by = "sitename")
+
+## data prepared by di
+df_di <- read_csv("~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/soil_property_extraction_20210323/global_leaf_NP_with_soil_property_from_HWSD_WISE_GSDE_23032021.csv")
+
+## add my extractions to di's soil stuff
+df_di <- df_di %>% 
+  left_join(df_gti %>% dplyr::select(-year_start, -year_end, -elv, -lon, -lat), by = "sitename") %>% 
+  left_join(df_ndep_agg, by = "sitename") %>% 
+  left_join(df_co2, by = "sitename") %>% 
+  left_join(df_pmodel, by = "sitename")
+
+write_csv(df_di, "~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/soil_property_extraction_20210323/global_leaf_NP_with_soil_property_from_HWSD_WISE_GSDE_Pmodel_Ndep_GTI_CO2_25032021.csv")  
+
+dim(df_my)
+dim(df_di)
+dim(df)
+
+names(df_my)
+
+## are my extractions and the one of di the same?
+## yes
+df_my %>% 
+  dplyr::select(sitename, T_CACO3_beni = T_CACO3) %>% 
+  left_join(dplyr::select(df_di, sitename, T_CACO3_di = T_CACO3), by = "sitename") %>% 
+  rbeni::analyse_modobs2("T_CACO3_beni", "T_CACO3_di", type = "hex")
+
+## yes
+df_my %>% 
+  dplyr::select(sitename, T_PH_H2O_beni = T_PH_H2O) %>% 
+  left_join(dplyr::select(df_di, sitename, T_PH_H2O_di = T_PH_H2O), by = "sitename") %>% 
+  rbeni::analyse_modobs2("T_PH_H2O_beni", "T_PH_H2O_di", type = "hex")
+
+df_my %>% 
+  dplyr::select(sitename, CNrt_beni = CNrt) %>% 
+  left_join(dplyr::select(df_di, sitename, CNrt_di = CNrt), by = "sitename") %>% 
+  rbeni::analyse_modobs2("CNrt_beni", "CNrt_di", type = "hex")
+```
+
+### Extracting from global NetCDF files
+
+This is a code example and is to be used for extracting AI, alpha, and CWDX40 (see [here](https://www.notion.so/computationales/4e2e0ca6b5d3497894c64bed71a4937d?v=0ee5d81cd0fe42ac8ac1ed0a938b3380)).
+
+Use the following files:
+
+-   `~/data/mct_data/cwdx40.nc` for CWDX40.
+-   `~/data/sofun_outputs/global_FULL_MODIS-C006_MOD15A2_v3.4/global_FULL_MODIS-C006_MOD15A2_v3.4.a.alpha_MEANANN.nc` for alpha.
+
+```{r}
+library(raster)
+
+filn <- "~/data/mct_data/cwdx40.nc"
+siteinfo <- tibble(sitename = "id1", lon = 100, lat = 50)  # example for required dataframe structure
+
+## using raster package
+rasta <- raster::raster(filn)  # use raster::brick() if data has three dimensions
+df <- raster::extract(
+    rasta,
+    sp::SpatialPoints(dplyr::select(siteinfo, lon, lat)), # , proj4string = sta@crs
+    sp = TRUE
+    ) %>%
+  as_tibble()
+
+## or simply using rbeni
+df <- rbeni::extract_pointdata_allsites(filn, df_lonlat = siteinfo)
+```

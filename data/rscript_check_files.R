@@ -18,6 +18,6 @@ df <- tibble(ichunk = 1:100) %>%
 
 save(df, file = "./data/df_file_availability.RData")
 
-df %>% filter(!avl_pmodel)
+df %>% dplyr::filter(!avl_pmodel)
 
 ## problem with 30, row 10, sitename i_109.1628_19.6431_20

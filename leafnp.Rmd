@@ -17,8 +17,9 @@ library(ingestr)
 
 ## Read data
 
+File without environmental covariates.
 ```{r}
-df <- read_csv("~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/global_leaf_NP_total_Di_20210224.csv") %>%  #, col_types = "idddcccdddddccccccc") %>% 
+df <- read_csv("~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/global_leaf_NP_total_Di_20210224.csv") %>%  #, col_types = "idddcccdddddccccccc") %>%   # file without covariates
   rename(lon = lon_estimate,
          lat = lat_estimate,
          elv = Alt_Di_check_final) %>% 
@@ -36,7 +37,7 @@ df <- read_csv("~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/global_leaf_NP_tot
   mutate(id = paste0("i", seq(nrow(.))))
 
 ## save with added ids and site names
-write_csv(df, file = "~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/global_leaf_NP_total_Di_20210224_PROC.csv")
+write_csv(df, file = "~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/global_leaf_NP_total_Di_20210702_PROC.csv")
 
 ## look at some distributions
 df %>% 
@@ -51,7 +52,7 @@ df %>%
 ### Complement missing elevation
 
 ```{r}
-# df <- read_csv("~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/global_leaf_NP_total_Di_20210224_PROC.csv")
+# df <- read_csv("~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/global_leaf_NP_total_Di_20210702_PROC.csv")
 
 df_tmp <- df %>% 
   dplyr::filter(is.na(elv)) %>% 
@@ -83,7 +84,7 @@ df <- df %>%
   mutate(sitename = paste0("i_", as.character(lon), "_", as.character(lat), "_", as.character(elv)))
 
 ## save with complemented elevation
-write_csv(df, file = "~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/global_leaf_NP_total_Di_20210224_PROC.csv")
+write_csv(df, file = "~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/global_leaf_NP_total_Di_20210702_PROC_ELV.csv")
 ```
 
 ## Identify sites
@@ -91,6 +92,8 @@ write_csv(df, file = "~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/global_leaf_
 Identify sites (unique lon, lat, elevation)
 
 ```{r}
+# df <- read_csv("~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/global_leaf_NP_total_Di_20210702_PROC_ELV.csv")
+
 df_sites <- df %>%
   distinct(sitename, lon, lat, elv)
 
@@ -101,8 +104,8 @@ df_sites <- df %>% dplyr::select(sitename, year_start, year_end) %>%
             year_end   = max(year_end, na.rm = TRUE)) %>% 
   right_join(df_sites, by = "sitename")
 
-write_csv(df_sites, file = "~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/df_sites_leafnp.csv")
-write_csv(df_sites, file = "data/df_sites_leafnp.csv")
+write_csv(df_sites, file = "~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/df_sites_leafnp_20210702.csv")
+write_csv(df_sites, file = "data/df_sites_leafnp_20210702.csv")
 ```
 
 ## Data overview
@@ -112,15 +115,19 @@ write_csv(df_sites, file = "data/df_sites_leafnp.csv")
 How many observations per species?
 
 ```{r}
-tmp <- df %>% 
+df %>% 
   group_by(Species) %>% 
   summarise(count = n()) %>% 
   ungroup() %>% 
   arrange(desc(count))
 
-tmp %>% 
-  ggplot(aes(x = count, y = ..count..)) +
-  geom_histogram()
+## number of data points with species that have at least 5 observations: 23513
+use_species <- tmp %>% 
+  dplyr::filter(count >= 5) %>% 
+  pull(Species)
+df %>% 
+  dplyr::filter(Species %in% use_species) %>% 
+  nrow()
 ```
 
 ### Observations per genus
@@ -135,10 +142,6 @@ tmp <- df %>%
   arrange(desc(count))
 
 tmp
-
-tmp %>% 
-  ggplot(aes(x = count, y = ..count..)) +
-  geom_histogram()
 ```
 
 ### Observations per family
@@ -153,10 +156,6 @@ tmp <- df %>%
   arrange(desc(count))
 
 tmp
-
-tmp %>% 
-  ggplot(aes(x = count, y = ..count..)) +
-  geom_histogram()
 ```
 
 ### Site distribution
@@ -227,20 +226,14 @@ plot_map_simpl() +
 -   Complement dataset with data points where only Nmass or only Pmass is available (no strict requirement to have paired Nmass and Pmass for this analysis).
 -   Information about species identity, family, genus
 
-### P-model outputs and climate indeces
-
-The script `rscript_ingest_run_rsofun.R` is used to collect forcing data and run P-model simulations for all sites (N = 2149). Outputs are aggregated by site (annual mean of Vcmax25 and Jmax25, weighted by daily GPP). This also runs the function `R/calc_climate_index.R` on collected climate forcing data to return climate indeces (some of which are complementary to what is collected directly from WorldClim). The output is on Euler and is read here.
-```{r}
-df_pmodel <- read_csv("~/data/LeafNP_tiandi/df_pmodel_leafnp.csv")
-```
-
-
 ### HWSD Soil
 
 Read HWSD for each site. This reads all variables available fro HWSD. Select relevant variables in a separate step.
 
 ```{r eval=FALSE}
-filn <- "data/df_hwsd.RData"
+# df_sites <- read_csv("data/df_sites_leafnp_20210702.csv")
+
+filn <- "data/df_hwsd_20210324.RData"
 if (!file.exists(filn)){
   df_hwsd <- ingest(
     df_sites,
@@ -253,6 +246,11 @@ if (!file.exists(filn)){
     mutate(n_row = purrr::map_int(data, ~nrow(.))) %>% 
     mutate(data = purrr::map(data, ~slice(., 1)))
   
+  df_hwsd <- df_hwsd %>% 
+    dplyr::select(-n_row) %>% 
+    unnest(data) %>% 
+    dplyr::select(sitename, T_BULK_DENSITY, AWC_CLASS, T_CLAY, T_SILT, T_SAND, T_GRAVEL, T_PH_H2O, T_TEB, T_BS, T_CEC_SOIL, T_CEC_CLAY, T_ECE, T_ESP, T_CACO3, T_OC)
+  
   save(df_hwsd, file = filn)
   
 } else {
@@ -260,39 +258,6 @@ if (!file.exists(filn)){
 }
 ```
 
-Combine datasets.
-
-```{r}
-df <- df %>% 
-  left_join(
-    df_hwsd %>% 
-      unnest(data)
-  )
-```
-
-### SoilGrids
-
-Define all variables to be extracted from SoilGrids
-
-```{r}
-settings_soilgrids <- get_settings_soilgrids(
-  varnam = c("nitrogen", "cec"), # xxx please adjust
-  layer = 1:3                    # xxx please adjust
-  )
-```
-
-Get and save data.
-
-```{r}
-df_soilgrids <- ingest(
-  df_sites %>% slice(1:10),
-  source    = "soilgrids",
-  settings  = settings_soilgrids
-  ) %>% 
-  unnest(data)  # to get a normal flat table
-
-save(df_soilgrids, file = "data/df_soilgrids.RData")
-```
 
 ### WISE30sec Soil
 
@@ -300,67 +265,83 @@ Define all variables to be extracted from WISE30sec
 
 ```{r}
 settings_wise <- get_settings_wise(
-  varnam = c("CNrt", "CECS"),  # xxx please adjust
-  layer = 1:3                  # xxx please adjust
+  varnam = c("ORGC", "TOTN", "CNrt", "ALSA"),
+  layer = 1:2
   )
-```
 
-Get and save data.
-
-```{r}
 df_wise <- ingest(
   df_sites,
   source    = "wise",
   settings  = settings_wise,
   dir       = "~/data/soil/wise"
   ) %>% 
-  unnsest(data)  # to get a normal flat table
+  unnest(data)  # to get a normal flat table
 
-dave(df_wise, file = "data/df_wise.RData")
+save(df_wise, file = "data/df_wise_20210702.RData")
 ```
 
-### GSDE Soil XXX
+
+### GSDE
 
 Define all variables to be extracted from GSDE. This is not using ingestr.
 
 ```{r}
-settings_wise <- get_settings_gsde(
-  varnam = c("CNrt", "CECS"),  # xxx please adjust
-  layer = 1:3                  # xxx please adjust
-  )
-```
+df_sites <- read_csv("data/df_sites_leafnp_20210702.csv")
 
-Get data.
+settings_gsde <- list(varnam =  c("PBR", "PHO", "TP", "TK", "TS"), layer = 1:4)
 
-```{r}
-df_wise <- ingest(
+df_gsde <- ingest(
   df_sites,
-  source    = "wise",
-  settings  = settings_wise,
-  dir       = "~/data/soil/wise"
-  )
+  source    = "gsde",
+  settings  = settings_gsde,
+  dir       = "~/data/soil/shangguan"
+  ) %>% 
+  unnest(data)
+
+save(df_gsde, file = "data/df_gsde_20210408.RData")
 ```
+
+
+<!-- ### SoilGrids -->
+
+<!-- Define all variables to be extracted from SoilGrids -->
+
+<!-- ```{r} -->
+<!-- settings_soilgrids <- get_settings_soilgrids( -->
+<!--   varnam = c("nitrogen", "cec"), # xxx please adjust -->
+<!--   layer = 1:3                    # xxx please adjust -->
+<!--   ) -->
+<!-- ``` -->
+
+<!-- Get and save data. -->
+
+<!-- ```{r} -->
+<!-- df_sites <- read_csv("data/df_sites_leafnp.csv") -->
+<!-- df_soilgrids <- ingest( -->
+<!--   df_sites, -->
+<!--   source    = "soilgrids", -->
+<!--   settings  = settings_soilgrids -->
+<!--   ) %>%  -->
+<!--   unnest(data)  # to get a normal flat table -->
+
+<!-- save(df_soilgrids, file = "data/df_soilgrids_leafnp.RData") -->
+<!-- ``` -->
+
 
 ### Topography index
 
 ```{r}
-filn <- "data/df_gti.RData"
+filn <- "data/df_gti_20210702.RData"
 if (!file.exists(filn)){
   rasta <- raster::raster("~/data/gti_marthews/ga2.nc")
   df_gti <- raster::extract(rasta, sp::SpatialPoints(dplyr::select(df_sites, lon, lat) %>% distinct()), sp = TRUE) %>%
     as_tibble() %>% 
-    rename(gti = GDAL.Band.Number.1)
+    rename(gti = GDAL.Band.Number.1) %>% 
+    right_join(df_sites, by = c("lon", "lat"))
   save(df_gti, file = filn)
 } else {
   load(filn)
 }
-
-## add to data 
-df <- df_gti%>% 
-      right_join(
-        df,
-        by = c("lon", "lat")
-      )
 ```
 
 ### CO2
@@ -369,18 +350,17 @@ Read CO2 level as the global mean and a mean over all the years over which sampl
 
 ```{r}
 df_co2 <- ingest(
-  df_sites,
-  source  = "co2_mlo",
-  verbose = FALSE
+    df_sites,
+    source  = "co2_cmip",
+    verbose = FALSE,
+    dir = "~/data/co2/"
   ) %>% 
   
   ## aggregate over years per site
   mutate(co2 = purrr::map_dbl(data, ~{summarise(., co2 = mean(co2)) %>% pull(co2)})) %>% 
   dplyr::select(-data)
 
-## add to data
-df <- df_co2 %>% 
-  right_join(df, by = "sitename")
+save(df_co2, file = "data/df_co2_20210702.RData")
 ```
 
 ### Nitrogen deposition
@@ -388,17 +368,16 @@ df <- df_co2 %>%
 Read N deposition from Lamarque et al. (2011) as NOx and NOy in gN m$^{-2}$ yr$^{-1}$ for respective year and location (based on half-degree input file).
 
 ```{r}
-filn <- "data/df_ndep.RData"
+filn <- "data/df_ndep_20210702.RData"
 if (!file.exists(filn)){
   df_ndep <- ingest(
     df_sites %>% 
-      ## for some we don't have data beyond 2009
-      rowwise() %>% 
-      mutate(year_start = min(year_start, 2009),
-             year_end = min(year_end, 2009)),
+      mutate(year_start = ifelse(year_start > 2009, 2009, year_start),
+             year_end = ifelse(year_end > 2009, 2009, year_end)),    
     source    = "ndep",
     timescale = "y",
     dir       = "~/data/ndep_lamarque/",
+    getvars   = c("nhx", "noy"),
     verbose   = FALSE
     )
   save(df_ndep, file = filn)
@@ -412,15 +391,77 @@ df_ndep_agg <- df_ndep %>%
   mutate(data = purrr::map(data, ~summarise(., ndep = mean(ndep, na.rm = TRUE)))) %>% 
   unnest(data)
 
-
+save(df_ndep_agg, file = "data/df_ndep_20210702.RData")
 ```
 
-### Combine all data
+### P-model outputs and climate indeces
+
+The script `rscript_ingest_run_rsofun.R` is used to collect forcing data and run P-model simulations for all sites (N = 2149). Outputs are aggregated by site (annual mean of Vcmax25 and Jmax25, weighted by daily GPP). This also runs the function `R/calc_climate_index.R` on collected climate forcing data to return climate indeces (some of which are complementary to what is collected directly from WorldClim). The output is on Euler and is read here.
+```{r}
+read_pmodel <- function(path){
+  load(path)
+  return(df_pmodel)
+}
+df_pmodel <- purrr::map_dfr(as.list(list.files("data", pattern = "df_pmodel.*.RData", full.names = TRUE)),
+                            ~read_pmodel(.))
+```
+
+
+## Combine all data
 
 ```{r}
-df <- df %>% 
-  left_join(df_ndep_agg, by = "sitename")
-...
+load("data/df_ndep_20210702.RData") # loads df_ndep_agg
+load("data/df_co2_20210702.RData") # df_co2
+load("data/df_gti_20210702.RData") # loads df_gti
+load("data/df_gsde_20210702.RData") # df_gsde
+load("data/df_wise_20210702.RData") # df_wise
+load("data/df_hwsd_20210702.RData") # df_hwsd
+
+df <- read_csv("~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/global_leaf_NP_total_Di_20210702_PROC.csv")
+
+df_my <- df %>% 
+  left_join(df_wise, by = "sitename") %>% 
+  left_join(df_hwsd, by = "sitename") %>% 
+  left_join(df_gti %>% dplyr::select(-year_start, -year_end, -elv, -lon, -lat), by = "sitename") %>% 
+  left_join(df_ndep_agg, by = "sitename") %>% 
+  left_join(df_co2, by = "sitename") %>% 
+  left_join(df_pmodel, by = "sitename")
+
+## data prepared by di
+df_di <- read_csv("~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/soil_property_extraction_20210323/global_leaf_NP_with_soil_property_from_HWSD_WISE_GSDE_23032021.csv")
+
+## add my extractions to di's soil stuff
+df_di <- df_di %>% 
+  left_join(df_gti %>% dplyr::select(-year_start, -year_end, -elv, -lon, -lat), by = "sitename") %>% 
+  left_join(df_ndep_agg, by = "sitename") %>% 
+  left_join(df_co2, by = "sitename") %>% 
+  left_join(df_pmodel, by = "sitename")
+
+write_csv(df_di, "~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/soil_property_extraction_20210323/global_leaf_NP_with_soil_property_from_HWSD_WISE_GSDE_Pmodel_Ndep_GTI_CO2_25032021.csv")  
+
+dim(df_my)
+dim(df_di)
+dim(df)
+
+names(df_my)
+
+## are my extractions and the one of di the same?
+## yes
+df_my %>% 
+  dplyr::select(sitename, T_CACO3_beni = T_CACO3) %>% 
+  left_join(dplyr::select(df_di, sitename, T_CACO3_di = T_CACO3), by = "sitename") %>% 
+  rbeni::analyse_modobs2("T_CACO3_beni", "T_CACO3_di", type = "hex")
+
+## yes
+df_my %>% 
+  dplyr::select(sitename, T_PH_H2O_beni = T_PH_H2O) %>% 
+  left_join(dplyr::select(df_di, sitename, T_PH_H2O_di = T_PH_H2O), by = "sitename") %>% 
+  rbeni::analyse_modobs2("T_PH_H2O_beni", "T_PH_H2O_di", type = "hex")
+
+df_my %>% 
+  dplyr::select(sitename, CNrt_beni = CNrt) %>% 
+  left_join(dplyr::select(df_di, sitename, CNrt_di = CNrt), by = "sitename") %>% 
+  rbeni::analyse_modobs2("CNrt_beni", "CNrt_di", type = "hex")
 ```
 
 ### Extracting from global NetCDF files
