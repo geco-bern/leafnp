@@ -20,10 +20,10 @@ library(visdat)
 
 ```{r}
 ## original data, no covariates
-df <- read_csv("~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/global_leaf_NP_total_Di_20210324_PROC.csv")
+df <- read_csv("~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/global_leaf_NP_total_Di_20210702_PROC_ELV.csv")
 
 ## sites (unique lon, lat, elv)
-df_sites <- read_csv("~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/df_sites_leafnp_20210324.csv")
+df_sites <- read_csv("~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/df_sites_leafnp_20210702.csv")
 
 ## covariates added, but incomplete
 df_cov <- read_csv("~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/update_data_2021July/updated_dataset_20210429.csv")
@@ -42,12 +42,13 @@ df_cov %>%
   dplyr::filter(value > 0)
 ```
 
-Problematic `soil_N` and `soil_P` with 88% missing. Not sure whey they came from. Did you rename them, Di? 
+Problematic `soil_N` and `soil_P` with 88% missing. Not sure where they came from. Did you rename them, Di? 
 I suspect they are from WISE and GSDE.
 
-```{r}
-df_wise <- read_csv("data/df_wise_20210324.RData")
-```
+<!-- ```{r} -->
+<!-- load("data/df_wise_20210324.RData") -->
+<!-- load("data/df_gsde_20210408.RData") -->
+<!-- ``` -->
 
 
 ## Complement dataset
@@ -57,171 +58,128 @@ df_wise <- read_csv("data/df_wise_20210324.RData")
 Read HWSD for each site. This reads all variables available fro HWSD. Select relevant variables in a separate step.
 
 ```{r eval=FALSE}
-# df_sites <- read_csv("data/df_sites_leafnp_20210324.csv")
-
 filn <- "data/df_hwsd_20210324.RData"
-if (!file.exists(filn)){
-  df_hwsd <- ingest(
-    df_sites,
-    source = "hwsd",
-    settings = list(fil = "~/data/hwsd/HWSD_RASTER/hwsd.bil")
-    )
-  
-  ## for some it got info for multiple soil types - take only first ones => TEST INFLUENCE OF THIS
-  df_hwsd <- df_hwsd %>% 
-    mutate(n_row = purrr::map_int(data, ~nrow(.))) %>% 
-    mutate(data = purrr::map(data, ~slice(., 1)))
-  
-  df_hwsd <- df_hwsd %>% 
-    dplyr::select(-n_row) %>% 
-    unnest(data) %>% 
-    dplyr::select(sitename, T_BULK_DENSITY, AWC_CLASS, T_CLAY, T_SILT, T_SAND, T_GRAVEL, T_PH_H2O, T_TEB, T_BS, T_CEC_SOIL, T_CEC_CLAY, T_ECE, T_ESP, T_CACO3, T_OC)
-  
-  save(df_hwsd, file = filn)
-  
-} else {
-  load(filn)
-}
+load(filn)
 ```
+
+```{r}
+## small number of data is missing
+vis_miss(df_hwsd)
+```
+
+```{r}
+sites_missing_hwsd <- df_hwsd %>% 
+  dplyr::filter(is.na(T_BULK_DENSITY)) %>%  #  | is.na(T_GRAVEL) | is.na(AWC_CLASS)
+  pull(sitename) %>% 
+  unique()
+
+df_sites_missing <- df_sites %>% 
+  dplyr::filter(sitename %in% sites_missing_hwsd)
+
+plot_map_simpl() +
+  geom_point(data = df_sites_missing, aes(x = lon, y = lat), color = "red", size = 0.3)
+```
+
+Extract again.
+```{r}
+df_hwsd_compl <- ingest(
+  df_sites_missing,
+  source = "hwsd",
+  settings = list(fil = "~/data/hwsd/HWSD_RASTER/hwsd.bil")
+  )
+
+df_hwsd_compl %>% 
+  unnest(data) %>% 
+  vis_miss()
+```
+
+The problem is that the data is just missing for these locations, there is no way to resolve it on "ingestr-side". The fraction of missing data is 0.6%. That's acceptable.
 
 ### WISE30sec Soil
 
 Define all variables to be extracted from WISE30sec
 
 ```{r}
-settings_wise <- get_settings_wise(
-  varnam = c("ORGC", "TOTN", "CNrt", "ALSA"),
-  layer = 1:2
-  )
-
-df_wise <- ingest(
-  df_sites,
-  source    = "wise",
-  settings  = settings_wise,
-  dir       = "~/data/soil/wise"
-  ) %>% 
-  unnest(data)  # to get a normal flat table
-
-save(df_wise, file = "data/df_wise_20210324.RData")
+load("data/df_wise_20210324.RData")
 ```
 
+Practically no missing data (<0.1%).
+```{r}
+vis_miss(df_wise)
+```
 
 ### GSDE
 
-Define all variables to be extracted from GSDE. This is not using ingestr.
-
 ```{r}
-df_sites <- read_csv("data/df_sites_leafnp_20210324.csv")
+load("data/df_gsde_20210408.RData")
+```
 
-settings_gsde <- list(varnam =  c("PBR", "PHO", "TP", "TK", "TS"), layer = 1:4)
+Lots of missing data!
+```{r}
+vis_miss(df_gsde)
+```
 
-df_gsde <- ingest(
-  df_sites,
+Map missing data. No particular pattern.
+```{r}
+sites_missing_gsde <- df_gsde %>% 
+  dplyr::filter(is.na(PBR)) %>%  #  | is.na(T_GRAVEL) | is.na(AWC_CLASS)
+  pull(sitename) %>% 
+  unique()
+
+df_sites_missing <- df_sites %>% 
+  dplyr::filter(sitename %in% sites_missing_gsde)
+
+plot_map_simpl() +
+  geom_point(data = df_sites_missing, aes(x = lon, y = lat), color = "red", size = 0.3)
+```
+
+Try extracting again.
+```{r}
+settings_gsde <- list(varnam =  c("PBR"), layer = 1:4)    # , "PHO", "TP", "TK", "TS"
+
+df_gsde_compl <- ingest(
+  df_sites_missing %>% slice(1:3),
   source    = "gsde",
   settings  = settings_gsde,
   dir       = "~/data/soil/shangguan"
   ) %>% 
   unnest(data)
-
-save(df_gsde, file = "data/df_gsde_20210408.RData")
 ```
-
-
-<!-- ### SoilGrids -->
-
-<!-- Define all variables to be extracted from SoilGrids -->
-
-<!-- ```{r} -->
-<!-- settings_soilgrids <- get_settings_soilgrids( -->
-<!--   varnam = c("nitrogen", "cec"), # xxx please adjust -->
-<!--   layer = 1:3                    # xxx please adjust -->
-<!--   ) -->
-<!-- ``` -->
-
-<!-- Get and save data. -->
-
-<!-- ```{r} -->
-<!-- df_sites <- read_csv("data/df_sites_leafnp.csv") -->
-<!-- df_soilgrids <- ingest( -->
-<!--   df_sites, -->
-<!--   source    = "soilgrids", -->
-<!--   settings  = settings_soilgrids -->
-<!--   ) %>%  -->
-<!--   unnest(data)  # to get a normal flat table -->
-
-<!-- save(df_soilgrids, file = "data/df_soilgrids_leafnp.RData") -->
-<!-- ``` -->
 
 
 ### Topography index
 
+0.26% missing. Acceptable.
+
 ```{r}
-filn <- "data/df_gti_20210324.RData"
-if (!file.exists(filn)){
-  rasta <- raster::raster("~/data/gti_marthews/ga2.nc")
-  df_gti <- raster::extract(rasta, sp::SpatialPoints(dplyr::select(df_sites, lon, lat) %>% distinct()), sp = TRUE) %>%
-    as_tibble() %>% 
-    rename(gti = GDAL.Band.Number.1) %>% 
-    right_join(df_sites, by = c("lon", "lat"))
-  save(df_gti, file = filn)
-} else {
-  load(filn)
-}
+load("data/df_gti_20210324.RData")
+vis_miss(df_gti)
 ```
 
 ### CO2
 
-Read CO2 level as the global mean and a mean over all the years over which sampling was done. This means that if we have replicate measurements for a given species at a given site, the measurements are given the same CO2 level. This assumes that replicates are not intended to cover a time period over which the environment changes.
+No missing.
 
 ```{r}
-df_co2 <- ingest(
-    df_sites,
-    source  = "co2_cmip",
-    verbose = FALSE,
-    dir = "~/data/co2/"
-  ) %>% 
-  
-  ## aggregate over years per site
-  mutate(co2 = purrr::map_dbl(data, ~{summarise(., co2 = mean(co2)) %>% pull(co2)})) %>% 
-  dplyr::select(-data)
-
-save(df_co2, file = "data/df_co2_20210324.RData")
+load("data/df_co2_20210324.RData")
+vis_miss(df_co2)
 ```
 
 ### Nitrogen deposition
 
-Read N deposition from Lamarque et al. (2011) as NOx and NOy in gN m$^{-2}$ yr$^{-1}$ for respective year and location (based on half-degree input file).
+No missing. 
 
 ```{r}
-filn <- "data/df_ndep_20210324.RData"
-if (!file.exists(filn)){
-  df_ndep <- ingest(
-    df_sites %>% 
-      mutate(year_start = ifelse(year_start > 2009, 2009, year_start),
-             year_end = ifelse(year_end > 2009, 2009, year_end)),    
-    source    = "ndep",
-    timescale = "y",
-    dir       = "~/data/ndep_lamarque/",
-    getvars   = c("nhx", "noy"),
-    verbose   = FALSE
-    )
-  save(df_ndep, file = filn)
-} else {
-  load(filn)
-}
-
-## take sum of noy and nhx and aggregate over years
-df_ndep_agg <- df_ndep %>% 
-  mutate(data = purrr::map(data, ~mutate(., ndep = noy + nhx))) %>% 
-  mutate(data = purrr::map(data, ~summarise(., ndep = mean(ndep, na.rm = TRUE)))) %>% 
-  unnest(data)
-
-save(df_ndep_agg, file = "data/df_ndep_20210324.RData")
+load("data/df_ndep_20210324.RData")
+vis_miss(df_ndep_agg)
 ```
 
 ### P-model outputs and climate indeces
 
-The script `rscript_ingest_run_rsofun.R` is used to collect forcing data and run P-model simulations for all sites (N = 2149). Outputs are aggregated by site (annual mean of Vcmax25 and Jmax25, weighted by daily GPP). This also runs the function `R/calc_climate_index.R` on collected climate forcing data to return climate indeces (some of which are complementary to what is collected directly from WorldClim). The output is on Euler and is read here.
+The script `rscript_ingest_run_rsofun.R` is used to collect forcing data and run P-model simulations for all sites (N = 2149). Outputs are aggregated by site (annual mean of Vcmax25 and Jmax25, weighted by daily GPP). This also runs the function `R/calc_climate_index.R` on collected climate forcing data to return climate indices (some of which are complementary to what is collected directly from WorldClim). The output is on Euler and is read here.
+
+0.2% missing. Acceptable.
+
 ```{r}
 read_pmodel <- function(path){
   load(path)
@@ -229,7 +187,13 @@ read_pmodel <- function(path){
 }
 df_pmodel <- purrr::map_dfr(as.list(list.files("data", pattern = "df_pmodel.*.RData", full.names = TRUE)),
                             ~read_pmodel(.))
+
+save(df_pmodel, file = "data/df_pmodel.RData")
+
+vis_miss(df_pmodel)
 ```
+
+Large number of data missing for alpha. Unclear why. Resolve it.
 
 
 ## Combine all data
@@ -238,13 +202,14 @@ df_pmodel <- purrr::map_dfr(as.list(list.files("data", pattern = "df_pmodel.*.RD
 load("data/df_ndep_20210324.RData") # loads df_ndep_agg
 load("data/df_co2_20210324.RData") # df_co2
 load("data/df_gti_20210324.RData") # loads df_gti
-load("data/df_gsde_20210324.RData") # df_gsde
+load("data/df_gsde_20210408.RData") # df_gsde
 load("data/df_wise_20210324.RData") # df_wise
 load("data/df_hwsd_20210324.RData") # df_hwsd
 
-df <- read_csv("~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/global_leaf_NP_total_Di_20210324_PROC.csv")
+df <- read_csv("~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/global_leaf_NP_total_Di_20210702_PROC_ELV.csv")
 
 df_my <- df %>% 
+  dplyr::select(-Record_ID, -soil_N, -soil_P) %>% 
   left_join(df_wise, by = "sitename") %>% 
   left_join(df_hwsd, by = "sitename") %>% 
   left_join(df_gti %>% dplyr::select(-year_start, -year_end, -elv, -lon, -lat), by = "sitename") %>% 

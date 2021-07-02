@@ -83,6 +83,7 @@ ingest_run_rsofun <- function(siteinfo, ichunk = "X", totchunk = "XX", verbose =
   }
   
   path_cru <- paste0("data/ddf_cru_chunk_", as.character(ichunk), "_", as.character(totchunk), ".RData")
+  
   if (!file.exists(path_cru)){
     
     out_mem <- pryr::mem_change(
@@ -98,6 +99,7 @@ ingest_run_rsofun <- function(siteinfo, ichunk = "X", totchunk = "XX", verbose =
     if (verbose) print(out_mem)
     
   } else {
+    
     load(path_cru)
     
     ## check if any precip data is nan. if so, run ingestr again after it has been bugfixed.
