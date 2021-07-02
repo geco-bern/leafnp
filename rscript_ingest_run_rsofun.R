@@ -14,7 +14,7 @@ library(rsofun)
 library(rbeni)
 library(pryr)
 
-# source("R/ingest_run_rsofun.R")
+source("R/ingest_run_rsofun.R")
 
 ## read sites data frame
 df_sites <- read_csv("data/df_sites_leafnp.csv") %>%
