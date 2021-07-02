@@ -106,6 +106,7 @@ df_sites <- df %>% dplyr::select(sitename, year_start, year_end) %>%
 
 write_csv(df_sites, file = "~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/df_sites_leafnp_20210702.csv")
 write_csv(df_sites, file = "data/df_sites_leafnp_20210702.csv")
+write_csv(df_sites, file = "data/df_sites_leafnp.csv")
 ```
 
 ## Data overview

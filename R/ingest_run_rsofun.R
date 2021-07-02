@@ -217,7 +217,7 @@ ingest_run_rsofun <- function(siteinfo, ichunk = "X", totchunk = "XX", verbose =
                                               vcmax25_wgt_sum = sum(vcmax25_wgt), 
                                               jmax25_wgt_sum = sum(jmax25_wgt), 
                                               gs_accl_wgt_sum = sum(gs_accl_wgt),
-                                              alpha = mean(alpha)))) %>% 
+                                              alpha = mean(alpha, na.rm = TRUE)))) %>% 
     mutate(data = purrr::map(data, ~mutate(., vcmax25 = vcmax25_wgt_sum / gpp_sum, jmax25 = jmax25_wgt_sum / gpp_sum, gs_accl = gs_accl_wgt_sum / gpp_sum))) %>% 
     unnest(data) %>% 
     dplyr::select(sitename, alpha, vcmax25, jmax25, gs_accl)
