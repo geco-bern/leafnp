@@ -111,7 +111,7 @@ vis_miss(df_wise)
 ### GSDE
 
 ```{r}
-load("data/df_gsde_20210408.RData")
+load("data/df_gsde_20210702.RData")
 ```
 
 Lots of missing data!
@@ -178,23 +178,20 @@ vis_miss(df_ndep_agg)
 
 The script `rscript_ingest_run_rsofun.R` is used to collect forcing data and run P-model simulations for all sites (N = 2149). Outputs are aggregated by site (annual mean of Vcmax25 and Jmax25, weighted by daily GPP). This also runs the function `R/calc_climate_index.R` on collected climate forcing data to return climate indices (some of which are complementary to what is collected directly from WorldClim). The output is on Euler and is read here.
 
-0.2% missing. Acceptable.
+None missing. Good.
 
 ```{r}
 read_pmodel <- function(path){
   load(path)
   return(df_pmodel)
 }
-df_pmodel <- purrr::map_dfr(as.list(list.files("data", pattern = "df_pmodel.*.RData", full.names = TRUE)),
+df_pmodel <- purrr::map_dfr(as.list(list.files("data", pattern = "df_pmodel_ichunk_.*.RData", full.names = TRUE)),
                             ~read_pmodel(.))
 
 save(df_pmodel, file = "data/df_pmodel.RData")
 
 vis_miss(df_pmodel)
 ```
-
-Large number of data missing for alpha. Unclear why. Resolve it.
-
 
 ## Combine all data
 
@@ -210,74 +207,88 @@ df <- read_csv("~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/global_leaf_NP_tot
 
 df_my <- df %>% 
   dplyr::select(-Record_ID, -soil_N, -soil_P) %>% 
-  left_join(df_wise, by = "sitename") %>% 
+  left_join(df_pmodel, by = "sitename") %>% 
+  left_join(df_gti %>% dplyr::select(-year_start, -year_end, -elv, -lon, -lat), by = "sitename") %>% 
+  left_join(df_ndep_agg, by = "sitename") %>% 
+  left_join(df_co2, by = "sitename") %>% 
   left_join(df_hwsd, by = "sitename") %>% 
-  left_join(df_gti %>% dplyr::select(-year_start, -year_end, -elv, -lon, -lat), by = "sitename") %>% 
-  left_join(df_ndep_agg, by = "sitename") %>% 
-  left_join(df_co2, by = "sitename") %>% 
-  left_join(df_pmodel, by = "sitename")
+  left_join(df_wise, by = "sitename") %>% 
+  left_join(df_gsde, by = "sitename")
 
-## data prepared by di
-df_di <- read_csv("~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/soil_property_extraction_20210323/global_leaf_NP_with_soil_property_from_HWSD_WISE_GSDE_23032021.csv")
-
-## add my extractions to di's soil stuff
-df_di <- df_di %>% 
-  left_join(df_gti %>% dplyr::select(-year_start, -year_end, -elv, -lon, -lat), by = "sitename") %>% 
-  left_join(df_ndep_agg, by = "sitename") %>% 
-  left_join(df_co2, by = "sitename") %>% 
-  left_join(df_pmodel, by = "sitename")
-
-write_csv(df_di, "~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/soil_property_extraction_20210323/global_leaf_NP_with_soil_property_from_HWSD_WISE_GSDE_Pmodel_Ndep_GTI_CO2_25032021.csv")  
-
-dim(df_my)
-dim(df_di)
-dim(df)
-
-names(df_my)
-
-## are my extractions and the one of di the same?
-## yes
-df_my %>% 
-  dplyr::select(sitename, T_CACO3_beni = T_CACO3) %>% 
-  left_join(dplyr::select(df_di, sitename, T_CACO3_di = T_CACO3), by = "sitename") %>% 
-  rbeni::analyse_modobs2("T_CACO3_beni", "T_CACO3_di", type = "hex")
-
-## yes
-df_my %>% 
-  dplyr::select(sitename, T_PH_H2O_beni = T_PH_H2O) %>% 
-  left_join(dplyr::select(df_di, sitename, T_PH_H2O_di = T_PH_H2O), by = "sitename") %>% 
-  rbeni::analyse_modobs2("T_PH_H2O_beni", "T_PH_H2O_di", type = "hex")
-
-df_my %>% 
-  dplyr::select(sitename, CNrt_beni = CNrt) %>% 
-  left_join(dplyr::select(df_di, sitename, CNrt_di = CNrt), by = "sitename") %>% 
-  rbeni::analyse_modobs2("CNrt_beni", "CNrt_di", type = "hex")
+vis_miss(df_my, warn_large_data = F)
+ggsave("fig/missing.pdf", width = 12, height = 6)
 ```
 
-### Extracting from global NetCDF files
-
-This is a code example and is to be used for extracting AI, alpha, and CWDX40 (see [here](https://www.notion.so/computationales/4e2e0ca6b5d3497894c64bed71a4937d?v=0ee5d81cd0fe42ac8ac1ed0a938b3380)).
-
-Use the following files:
-
--   `~/data/mct_data/cwdx40.nc` for CWDX40.
--   `~/data/sofun_outputs/global_FULL_MODIS-C006_MOD15A2_v3.4/global_FULL_MODIS-C006_MOD15A2_v3.4.a.alpha_MEANANN.nc` for alpha.
-
+Write to file.
 ```{r}
-library(raster)
-
-filn <- "~/data/mct_data/cwdx40.nc"
-siteinfo <- tibble(sitename = "id1", lon = 100, lat = 50)  # example for required dataframe structure
-
-## using raster package
-rasta <- raster::raster(filn)  # use raster::brick() if data has three dimensions
-df <- raster::extract(
-    rasta,
-    sp::SpatialPoints(dplyr::select(siteinfo, lon, lat)), # , proj4string = sta@crs
-    sp = TRUE
-    ) %>%
-  as_tibble()
-
-## or simply using rbeni
-df <- rbeni::extract_pointdata_allsites(filn, df_lonlat = siteinfo)
+write_csv(df_my, file = "~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/leafnp_data_covariates_20210702.csv")
 ```
+
+
+
+
+<!-- ```{r} -->
+<!-- ## data prepared by for GSDE data -->
+<!-- df_di <- read_csv("~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/soil_property_extraction_20210323/global_leaf_NP_with_soil_property_from_HWSD_WISE_GSDE_23032021.csv") -->
+
+<!-- ## add my extractions to di's soil stuff -->
+<!-- df_di <- df_di %>%  -->
+<!--   left_join(df_gti %>% dplyr::select(-year_start, -year_end, -elv, -lon, -lat), by = "sitename") %>%  -->
+<!--   left_join(df_ndep_agg, by = "sitename") %>%  -->
+<!--   left_join(df_co2, by = "sitename") %>%  -->
+<!--   left_join(df_pmodel, by = "sitename") -->
+
+<!-- write_csv(df_di, "~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/soil_property_extraction_20210323/global_leaf_NP_with_soil_property_from_HWSD_WISE_GSDE_Pmodel_Ndep_GTI_CO2_25032021.csv")   -->
+
+<!-- dim(df_my) -->
+<!-- dim(df_di) -->
+<!-- dim(df) -->
+
+<!-- names(df_my) -->
+
+<!-- ## are my extractions and the one of di the same? -->
+<!-- ## yes -->
+<!-- df_my %>%  -->
+<!--   dplyr::select(sitename, T_CACO3_beni = T_CACO3) %>%  -->
+<!--   left_join(dplyr::select(df_di, sitename, T_CACO3_di = T_CACO3), by = "sitename") %>%  -->
+<!--   rbeni::analyse_modobs2("T_CACO3_beni", "T_CACO3_di", type = "hex") -->
+
+<!-- ## yes -->
+<!-- df_my %>%  -->
+<!--   dplyr::select(sitename, T_PH_H2O_beni = T_PH_H2O) %>%  -->
+<!--   left_join(dplyr::select(df_di, sitename, T_PH_H2O_di = T_PH_H2O), by = "sitename") %>%  -->
+<!--   rbeni::analyse_modobs2("T_PH_H2O_beni", "T_PH_H2O_di", type = "hex") -->
+
+<!-- df_my %>%  -->
+<!--   dplyr::select(sitename, CNrt_beni = CNrt) %>%  -->
+<!--   left_join(dplyr::select(df_di, sitename, CNrt_di = CNrt), by = "sitename") %>%  -->
+<!--   rbeni::analyse_modobs2("CNrt_beni", "CNrt_di", type = "hex") -->
+<!-- ``` -->
+
+<!-- ### Extracting from global NetCDF files -->
+
+<!-- This is a code example and is to be used for extracting AI, alpha, and CWDX40 (see [here](https://www.notion.so/computationales/4e2e0ca6b5d3497894c64bed71a4937d?v=0ee5d81cd0fe42ac8ac1ed0a938b3380)). -->
+
+<!-- Use the following files: -->
+
+<!-- -   `~/data/mct_data/cwdx40.nc` for CWDX40. -->
+<!-- -   `~/data/sofun_outputs/global_FULL_MODIS-C006_MOD15A2_v3.4/global_FULL_MODIS-C006_MOD15A2_v3.4.a.alpha_MEANANN.nc` for alpha. -->
+
+<!-- ```{r} -->
+<!-- library(raster) -->
+
+<!-- filn <- "~/data/mct_data/cwdx40.nc" -->
+<!-- siteinfo <- tibble(sitename = "id1", lon = 100, lat = 50)  # example for required dataframe structure -->
+
+<!-- ## using raster package -->
+<!-- rasta <- raster::raster(filn)  # use raster::brick() if data has three dimensions -->
+<!-- df <- raster::extract( -->
+<!--     rasta, -->
+<!--     sp::SpatialPoints(dplyr::select(siteinfo, lon, lat)), # , proj4string = sta@crs -->
+<!--     sp = TRUE -->
+<!--     ) %>% -->
+<!--   as_tibble() -->
+
+<!-- ## or simply using rbeni -->
+<!-- df <- rbeni::extract_pointdata_allsites(filn, df_lonlat = siteinfo) -->
+<!-- ``` -->
