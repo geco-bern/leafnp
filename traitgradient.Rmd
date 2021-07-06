@@ -29,12 +29,18 @@ use_species <- df %>%
   summarise(n = n()) %>% 
   dplyr::filter(n >= 12) %>% 
   pull(Species)
+
+use_sites <- df %>% 
+  group_by(sitename) %>% 
+  summarise(n = n()) %>% 
+  dplyr::filter(n >= 5) %>% 
+  pull(sitename)
 ```
 
 Plot.
 ```{r eval=FALSE}
 df %>% 
-  dplyr::filter(Species %in% use_species) %>% 
+  dplyr::filter(Species %in% use_species & sitename %in% use_sites) %>% 
   ggplot(aes(x = leafN_sitemean, y = leafN, color = Species)) +
   geom_point()
 ```
@@ -42,7 +48,7 @@ df %>%
 Plot just the lines
 ```{r}
 df %>% 
-  dplyr::filter(Species %in% use_species) %>% 
+  dplyr::filter(Species %in% use_species & sitename %in% use_sites) %>% 
   group_by(Species) %>% 
   ggplot(aes(x = leafN_sitemean, y = leafN, group = Species)) +
   geom_smooth(method = "lm", se = FALSE, size = 0.5, alpha = 0.2) +
@@ -50,7 +56,7 @@ df %>%
   # geom_point(alpha = 0.3)
 
 df %>% 
-  dplyr::filter(Species %in% use_species) %>% 
+  dplyr::filter(Species %in% use_species & sitename %in% use_sites) %>% 
   group_by(Species) %>% 
   ggplot(aes(x = leafP_sitemean, y = leafP, group = Species)) +
   geom_smooth(method = "lm", se = FALSE, size = 0.5, alpha = 0.2) +
@@ -62,7 +68,7 @@ df %>%
 Fit linear regressions by species.
 ```{r}
 df_tga <- df %>% 
-  dplyr::filter(Species %in% use_species) %>% 
+  dplyr::filter(Species %in% use_species & sitename %in% use_sites) %>% 
   group_by(Species) %>% 
   nest() %>% 
   mutate(linmod_n = purrr::map(data, ~lm(leafN ~ leafN_sitemean, data = .)),
