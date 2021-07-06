@@ -17,8 +17,9 @@ library(ingestr)
 
 ## Read data
 
+File without environmental covariates.
 ```{r}
-df <- read_csv("~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/global_leaf_NP_total_Di_20210224.csv") %>%  #, col_types = "idddcccdddddccccccc") %>% 
+df <- read_csv("~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/global_leaf_NP_total_Di_20210224.csv") %>%  #, col_types = "idddcccdddddccccccc") %>%   # file without covariates
   rename(lon = lon_estimate,
          lat = lat_estimate,
          elv = Alt_Di_check_final) %>% 
@@ -36,7 +37,7 @@ df <- read_csv("~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/global_leaf_NP_tot
   mutate(id = paste0("i", seq(nrow(.))))
 
 ## save with added ids and site names
-write_csv(df, file = "~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/global_leaf_NP_total_Di_20210324_PROC.csv")
+write_csv(df, file = "~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/global_leaf_NP_total_Di_20210702_PROC.csv")
 
 ## look at some distributions
 df %>% 
@@ -51,7 +52,7 @@ df %>%
 ### Complement missing elevation
 
 ```{r}
-# df <- read_csv("~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/global_leaf_NP_total_Di_20210224_PROC.csv")
+# df <- read_csv("~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/global_leaf_NP_total_Di_20210702_PROC.csv")
 
 df_tmp <- df %>% 
   dplyr::filter(is.na(elv)) %>% 
@@ -83,7 +84,7 @@ df <- df %>%
   mutate(sitename = paste0("i_", as.character(lon), "_", as.character(lat), "_", as.character(elv)))
 
 ## save with complemented elevation
-write_csv(df, file = "~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/global_leaf_NP_total_Di_20210324_PROC.csv")
+write_csv(df, file = "~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/global_leaf_NP_total_Di_20210702_PROC_ELV.csv")
 ```
 
 ## Identify sites
@@ -91,7 +92,7 @@ write_csv(df, file = "~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/global_leaf_
 Identify sites (unique lon, lat, elevation)
 
 ```{r}
-# df <- read_csv("~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/global_leaf_NP_total_Di_20210324_PROC.csv")
+# df <- read_csv("~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/global_leaf_NP_total_Di_20210702_PROC_ELV.csv")
 
 df_sites <- df %>%
   distinct(sitename, lon, lat, elv)
@@ -103,8 +104,9 @@ df_sites <- df %>% dplyr::select(sitename, year_start, year_end) %>%
             year_end   = max(year_end, na.rm = TRUE)) %>% 
   right_join(df_sites, by = "sitename")
 
-write_csv(df_sites, file = "~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/df_sites_leafnp_20210324.csv")
-write_csv(df_sites, file = "data/df_sites_leafnp_20210324.csv")
+write_csv(df_sites, file = "~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/df_sites_leafnp_20210702.csv")
+write_csv(df_sites, file = "data/df_sites_leafnp_20210702.csv")
+write_csv(df_sites, file = "data/df_sites_leafnp.csv")
 ```
 
 ## Data overview
@@ -114,19 +116,15 @@ write_csv(df_sites, file = "data/df_sites_leafnp_20210324.csv")
 How many observations per species?
 
 ```{r}
-tmp <- df %>% 
+df %>% 
   group_by(Species) %>% 
   summarise(count = n()) %>% 
   ungroup() %>% 
   arrange(desc(count))
 
-tmp %>% 
-  ggplot(aes(x = count, y = ..count..)) +
-  geom_histogram()
-
-## number of data points with species that have at least 30 observations: 23513
+## number of data points with species that have at least 5 observations: 23513
 use_species <- tmp %>% 
-  dplyr::filter(count >= 30) %>% 
+  dplyr::filter(count >= 5) %>% 
   pull(Species)
 df %>% 
   dplyr::filter(Species %in% use_species) %>% 
@@ -145,10 +143,6 @@ tmp <- df %>%
   arrange(desc(count))
 
 tmp
-
-tmp %>% 
-  ggplot(aes(x = count, y = ..count..)) +
-  geom_histogram()
 ```
 
 ### Observations per family
@@ -163,10 +157,6 @@ tmp <- df %>%
   arrange(desc(count))
 
 tmp
-
-tmp %>% 
-  ggplot(aes(x = count, y = ..count..)) +
-  geom_histogram()
 ```
 
 ### Site distribution
@@ -242,7 +232,7 @@ plot_map_simpl() +
 Read HWSD for each site. This reads all variables available fro HWSD. Select relevant variables in a separate step.
 
 ```{r eval=FALSE}
-# df_sites <- read_csv("data/df_sites_leafnp_20210324.csv")
+# df_sites <- read_csv("data/df_sites_leafnp_20210702.csv")
 
 filn <- "data/df_hwsd_20210324.RData"
 if (!file.exists(filn)){
@@ -269,6 +259,7 @@ if (!file.exists(filn)){
 }
 ```
 
+
 ### WISE30sec Soil
 
 Define all variables to be extracted from WISE30sec
@@ -287,7 +278,7 @@ df_wise <- ingest(
   ) %>% 
   unnest(data)  # to get a normal flat table
 
-save(df_wise, file = "data/df_wise_20210324.RData")
+save(df_wise, file = "data/df_wise_20210702.RData")
 ```
 
 
@@ -296,7 +287,7 @@ save(df_wise, file = "data/df_wise_20210324.RData")
 Define all variables to be extracted from GSDE. This is not using ingestr.
 
 ```{r}
-df_sites <- read_csv("data/df_sites_leafnp_20210324.csv")
+df_sites <- read_csv("data/df_sites_leafnp_20210702.csv")
 
 settings_gsde <- list(varnam =  c("PBR", "PHO", "TP", "TK", "TS"), layer = 1:4)
 
@@ -308,7 +299,7 @@ df_gsde <- ingest(
   ) %>% 
   unnest(data)
 
-save(df_gsde, file = "data/df_gsde_20210408.RData")
+save(df_gsde, file = "data/df_gsde_20210702.RData")
 ```
 
 
@@ -341,7 +332,7 @@ save(df_gsde, file = "data/df_gsde_20210408.RData")
 ### Topography index
 
 ```{r}
-filn <- "data/df_gti_20210324.RData"
+filn <- "data/df_gti_20210702.RData"
 if (!file.exists(filn)){
   rasta <- raster::raster("~/data/gti_marthews/ga2.nc")
   df_gti <- raster::extract(rasta, sp::SpatialPoints(dplyr::select(df_sites, lon, lat) %>% distinct()), sp = TRUE) %>%
@@ -370,7 +361,7 @@ df_co2 <- ingest(
   mutate(co2 = purrr::map_dbl(data, ~{summarise(., co2 = mean(co2)) %>% pull(co2)})) %>% 
   dplyr::select(-data)
 
-save(df_co2, file = "data/df_co2_20210324.RData")
+save(df_co2, file = "data/df_co2_20210702.RData")
 ```
 
 ### Nitrogen deposition
@@ -378,7 +369,7 @@ save(df_co2, file = "data/df_co2_20210324.RData")
 Read N deposition from Lamarque et al. (2011) as NOx and NOy in gN m$^{-2}$ yr$^{-1}$ for respective year and location (based on half-degree input file).
 
 ```{r}
-filn <- "data/df_ndep_20210324.RData"
+filn <- "data/df_ndep_20210702.RData"
 if (!file.exists(filn)){
   df_ndep <- ingest(
     df_sites %>% 
@@ -401,7 +392,7 @@ df_ndep_agg <- df_ndep %>%
   mutate(data = purrr::map(data, ~summarise(., ndep = mean(ndep, na.rm = TRUE)))) %>% 
   unnest(data)
 
-save(df_ndep_agg, file = "data/df_ndep_20210324.RData")
+save(df_ndep_agg, file = "data/df_ndep_20210702.RData")
 ```
 
 ### P-model outputs and climate indeces
@@ -420,14 +411,14 @@ df_pmodel <- purrr::map_dfr(as.list(list.files("data", pattern = "df_pmodel.*.RD
 ## Combine all data
 
 ```{r}
-load("data/df_ndep_20210324.RData") # loads df_ndep_agg
-load("data/df_co2_20210324.RData") # df_co2
-load("data/df_gti_20210324.RData") # loads df_gti
-load("data/df_gsde_20210324.RData") # df_gsde
-load("data/df_wise_20210324.RData") # df_wise
-load("data/df_hwsd_20210324.RData") # df_hwsd
+load("data/df_ndep_20210702.RData") # loads df_ndep_agg
+load("data/df_co2_20210702.RData") # df_co2
+load("data/df_gti_20210702.RData") # loads df_gti
+load("data/df_gsde_20210702.RData") # df_gsde
+load("data/df_wise_20210702.RData") # df_wise
+load("data/df_hwsd_20210702.RData") # df_hwsd
 
-df <- read_csv("~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/global_leaf_NP_total_Di_20210324_PROC.csv")
+df <- read_csv("~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/global_leaf_NP_total_Di_20210702_PROC.csv")
 
 df_my <- df %>% 
   left_join(df_wise, by = "sitename") %>% 

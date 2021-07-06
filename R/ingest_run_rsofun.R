@@ -83,6 +83,7 @@ ingest_run_rsofun <- function(siteinfo, ichunk = "X", totchunk = "XX", verbose =
   }
   
   path_cru <- paste0("data/ddf_cru_chunk_", as.character(ichunk), "_", as.character(totchunk), ".RData")
+  
   if (!file.exists(path_cru)){
     
     out_mem <- pryr::mem_change(
@@ -98,6 +99,7 @@ ingest_run_rsofun <- function(siteinfo, ichunk = "X", totchunk = "XX", verbose =
     if (verbose) print(out_mem)
     
   } else {
+    
     load(path_cru)
     
     ## check if any precip data is nan. if so, run ingestr again after it has been bugfixed.
@@ -215,7 +217,7 @@ ingest_run_rsofun <- function(siteinfo, ichunk = "X", totchunk = "XX", verbose =
                                               vcmax25_wgt_sum = sum(vcmax25_wgt), 
                                               jmax25_wgt_sum = sum(jmax25_wgt), 
                                               gs_accl_wgt_sum = sum(gs_accl_wgt),
-                                              alpha = mean(alpha)))) %>% 
+                                              alpha = mean(alpha, na.rm = TRUE)))) %>% 
     mutate(data = purrr::map(data, ~mutate(., vcmax25 = vcmax25_wgt_sum / gpp_sum, jmax25 = jmax25_wgt_sum / gpp_sum, gs_accl = gs_accl_wgt_sum / gpp_sum))) %>% 
     unnest(data) %>% 
     dplyr::select(sitename, alpha, vcmax25, jmax25, gs_accl)

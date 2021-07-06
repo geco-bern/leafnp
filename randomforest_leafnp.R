@@ -1,50 +1,21 @@
----
-title: "Random Forest for leafnp"
-author: "Beni Stocker"
-date: "5/6/2021"
-output: html_document
----
-
-```{r setup, include=FALSE}
+## ----setup, include=FALSE-------------------------------------------------------------
 library(tidyverse)
 library(ranger)
 library(caret)
 library(visdat)
 library(vip)
 library(pdp)
-library(nnet)
-```
 
-## Read data
 
-```{r}
-df <- read_csv("~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/soil_property_extraction_20210323/global_leaf_NP_with_soil_property_from_HWSD_WISE_GSDE_Pmodel_Ndep_GTI_CO2_25032021.csv") %>% 
-  mutate(grass = tree_shrub_Herb == "H") 
+## -------------------------------------------------------------------------------------
+df <- read_csv("~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/soil_property_extraction_20210323/global_leaf_NP_with_soil_property_from_HWSD_WISE_GSDE_Pmodel_Ndep_GTI_CO2_25032021.csv")
 
 trgts <- c("leafN", "leafP", "LeafNP")
 preds <- c("ORGC",  "TOTN",  "CNrt",  "ALSA",  "elv", "AWC_CLASS", "T_GRAVEL",  "T_SAND",  "T_SILT",  "T_CLAY",  "T_REF_BULK_DENSITY",  "T_BULK_DENSITY",  "T_OC",  "T_PH_H2O", "T_CEC_CLAY",  "T_CEC_SOIL",  "T_BS",  "T_TEB",  "T_CACO3",  "T_ESP",  "T_ECE",  "PBR", "PHH2O",  "gti",  "ndep",  "co2",  "mat",  "matgs",  "tmonthmin",  "tmonthmax", "ndaysgs",  "mai",  "maigs",  "map",  "pmonthmin",  "mapgs",  "mavgs",  "mav", "alpha",  "vcmax25",  "jmax25",  "gs_accl",  "aet",  "ai",  "cwdx80")
-```
 
-Look at some values
-```{r}
-df %>% 
-  mutate(grass = tree_shrub_Herb == "H") %>% 
-  ggplot(aes(x = leafN, y = ..density.., fill = grass)) + 
-  geom_histogram(position="identity", alpha = 0.5)
-```
-```{r}
-df %>% 
-  ggplot(aes(vcmax25, leafN)) +
-  geom_point(alpha = 0.1) +
-  geom_smooth(method = "lm")
-```
 
-Take site means.
-```{r}
+## -------------------------------------------------------------------------------------
 dfs <- df %>% 
-  # # xxx test: only grasslands
-  # dplyr::filter(grass) %>% 
-  
   mutate(elv_grp = elv) %>% 
   group_by(lon, lat, elv_grp, sitename) %>% 
   summarise(across(c(preds, trgts), ~(mean(.x, na.rm = TRUE)))) %>% 
@@ -52,30 +23,18 @@ dfs <- df %>%
               group_by(sitename) %>% 
               summarise(nobs = n()),
             by = "sitename")
-```
 
-Visualise missing data.
-```{r}
+
+## -------------------------------------------------------------------------------------
 vis_miss(dfs)
-```
-There are a lot of data points still missing, especially for HWSD data and PFB, and also alpha. Am I using the latest updated dataset? 
 
-Use only data from sites with at least three observations. Reduces it from 7545 to 2200 points.
-```{r}
+
+## -------------------------------------------------------------------------------------
 # dfs <- dfs %>% 
 #   dplyr::filter(nobs >= 3)
-```
 
 
-## Train a model
-
-### Ranger
-
-A random forest model using the ranger library.
-
-Out of the box, it gets R2 = 0.47.
-
-```{r}
+## -------------------------------------------------------------------------------------
 mod_rf_leafn <- ranger(
   leafN ~ ., 
   data = dfs %>% 
@@ -89,10 +48,9 @@ mod_rf_leafn <- ranger(
 ## RMSE and R2
 sqrt(mod_rf_leafn$prediction.error)
 mod_rf_leafn$r.squared
-```
 
-With hyperparameter tuning according to [this](https://bradleyboehmke.github.io/HOML/random-forest.html).
-```{r}
+
+## -------------------------------------------------------------------------------------
 # create hyperparameter grid
 hyper_grid <- expand.grid(
   mtry = floor(length(preds) * c(.1, .15, .25, .333, .4)),
@@ -133,12 +91,9 @@ hyper_grid %>%
 best_hyper <- hyper_grid %>% 
   arrange(rmse) %>% 
   slice(1)
-```
 
-### Caret Random Forest
 
-Using the caret library with hyperparameter based on best results from above. This is useful to get CV results.
-```{r}
+## -------------------------------------------------------------------------------------
 traincotrlParams <- trainControl( 
   method="cv", 
   number=5, 
@@ -169,10 +124,9 @@ mod_rf_caret_leafn <- train(
   num.trees = 2000,         # boosted for the final model
   importance = "impurity"   # for variable importance analysis, alternative: "permutation"
   )
-```
 
-Visualise cross-validation results using results from the best tuned model.
-```{r}
+
+## -------------------------------------------------------------------------------------
 ## get predicted values from cross-validation resamples, take mean across repetitions
 df_cv <- mod_rf_caret_leafn$pred %>% 
   as_tibble() %>% 
@@ -195,56 +149,14 @@ out <- df_cv %>%
   rbeni::analyse_modobs2("mod", "obs", type = "heat")
 out$gg +
   ylim(5,40) + xlim(5,40)
-```
 
-### Caret Neural Network
 
-XXX Doesn't work well. XXX
-
-Using the caret library with hyperparameter based on best results from above. This is useful to get CV results.
-```{r}
-traincotrlParams <- trainControl( 
-  method="cv", 
-  number=5, 
-  verboseIter=FALSE,
-  savePredictions = "final"
-  )
-
-tune_grid <- expand.grid( .size = c(12,15,20), 
-                          .decay = c(0.1, 0.05, 0.01, 0.005)
-                          ) 
-
-set.seed(1982)
-
-mod_nn_caret_leafn <- train(
-  leafN ~ .,
-  data = dfs %>% 
-    ungroup() %>% 
-    drop_na() %>% 
-    dplyr::select(leafN, preds),
-  metric    = "RMSE",
-  method    = "nnet",
-  preProc   = c("center", "scale"),
-  tuneGrid  = tune_grid,
-  trControl = traincotrlParams,
-  na.action = na.omit,
-  trace     = FALSE
-  )
-mod_rf_caret_leafn
-mod_rf_caret_leafn$finalModel
-```
-
-## Interpret model
-
-Variable importance.
-
-```{r}
+## -------------------------------------------------------------------------------------
 p1 <- vip(mod_rf_caret_leafn$finalModel, num_features = 45, bar = FALSE)
 p1
-```
 
-Partial dependence:
-```{r}
+
+## -------------------------------------------------------------------------------------
 pdp_pred <- function(object, newdata){
   results <- mean(predict(object, newdata))$predictions
   return(results)
@@ -264,4 +176,4 @@ autoplot(out, rug = TRUE, train = as.data.frame(dfs %>%
           ungroup() %>% 
           drop_na() %>% 
           dplyr::select(leafN, preds)))
-```
+
