@@ -17,15 +17,33 @@ library(pdp)
 ## Read data
 
 ```{r}
-df <- read_csv("~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/soil_property_extraction_20210323/global_leaf_NP_with_soil_property_from_HWSD_WISE_GSDE_Pmodel_Ndep_GTI_CO2_25032021.csv")
+df <- read_csv("~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/soil_property_extraction_20210323/global_leaf_NP_with_soil_property_from_HWSD_WISE_GSDE_Pmodel_Ndep_GTI_CO2_25032021.csv") %>% 
+  mutate(grass = tree_shrub_Herb == "H") 
 
 trgts <- c("leafN", "leafP", "LeafNP")
 preds <- c("ORGC",  "TOTN",  "CNrt",  "ALSA",  "elv", "AWC_CLASS", "T_GRAVEL",  "T_SAND",  "T_SILT",  "T_CLAY",  "T_REF_BULK_DENSITY",  "T_BULK_DENSITY",  "T_OC",  "T_PH_H2O", "T_CEC_CLAY",  "T_CEC_SOIL",  "T_BS",  "T_TEB",  "T_CACO3",  "T_ESP",  "T_ECE",  "PBR", "PHH2O",  "gti",  "ndep",  "co2",  "mat",  "matgs",  "tmonthmin",  "tmonthmax", "ndaysgs",  "mai",  "maigs",  "map",  "pmonthmin",  "mapgs",  "mavgs",  "mav", "alpha",  "vcmax25",  "jmax25",  "gs_accl",  "aet",  "ai",  "cwdx80")
 ```
 
+Look at some values
+```{r}
+df %>% 
+  mutate(grass = tree_shrub_Herb == "H") %>% 
+  ggplot(aes(x = leafN, y = ..density.., fill = grass)) + 
+  geom_histogram(position="identity", alpha = 0.5)
+```
+```{r}
+df %>% 
+  ggplot(aes(vcmax25, leafN)) +
+  geom_point(alpha = 0.1) +
+  geom_smooth(method = "lm")
+```
+
 Take site means.
 ```{r}
 dfs <- df %>% 
+  # # xxx test: only grasslands
+  # dplyr::filter(grass) %>% 
+  
   mutate(elv_grp = elv) %>% 
   group_by(lon, lat, elv_grp, sitename) %>% 
   summarise(across(c(preds, trgts), ~(mean(.x, na.rm = TRUE)))) %>% 
