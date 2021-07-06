@@ -1,0 +1,79 @@
+---
+title: "Trait gradient analysis"
+author: "Beni"
+date: "7/6/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+```
+
+
+```{r cars}
+df <- read_csv("~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/leafnp_data_covariates_20210702.csv") %>% 
+  dplyr::select(leafN, leafP, LeafNP, Family, Genus, Species, sitename)
+```
+
+```{r cars}
+df <- df %>% 
+  group_by(sitename) %>% 
+  summarise(leafN_sitemean = mean(leafN), leafP_sitemean = mean(leafP)) %>% 
+  right_join(df, by = "sitename")
+```
+
+Use data only for species with at least five records.
+```{r}
+use_species <- df %>% 
+  group_by(Species) %>% 
+  summarise(n = n()) %>% 
+  dplyr::filter(n >= 100) %>% 
+  pull(Species)
+```
+
+Plot.
+```{r eval=FALSE}
+df %>% 
+  dplyr::filter(Species %in% use_species) %>% 
+  ggplot(aes(x = leafN_sitemean, y = leafN, color = Species)) +
+  geom_point()
+```
+
+Plot just the lines
+```{r}
+df %>% 
+  dplyr::filter(Species %in% use_species) %>% 
+  group_by(Species) %>% 
+  ggplot(aes(x = leafN_sitemean, y = leafN, color = Species)) +
+  geom_smooth(method = "lm", se = FALSE) +
+  geom_abline(intercept=0, slope=1, linetype="dotted") +
+  geom_point(alpha = 0.3)
+
+df %>% 
+  dplyr::filter(Species %in% use_species) %>% 
+  group_by(Species) %>% 
+  ggplot(aes(x = leafP_sitemean, y = leafP, color = Species)) +
+  geom_smooth(method = "lm", se = FALSE) +
+  geom_abline(intercept=0, slope=1, linetype="dotted") +
+  geom_point(alpha = 0.3)
+```
+
+
+
+Fit linear regressions by species.
+```{r}
+df_tga <- df %>% 
+  dplyr::filter(Species %in% use_species) %>% 
+  group_by(Species) %>% 
+  nest() %>% 
+  mutate(linmod_n = purrr::map(data, ~lm(leafN ~ leafN_sitemean, data = .)),
+         linmod_p = purrr::map(data, ~lm(leafP ~ leafP_sitemean, data = .))) %>% 
+  mutate(slope_n = purrr::map_dbl(linmod_n, ~coef(.)[2]),
+         slope_p = purrr::map_dbl(linmod_p, ~coef(.)[2]))
+
+df_tga %>% 
+  ggplot() +
+  geom_density(aes(slope_n, ..density..), color = "royalblue") +
+  geom_density(aes(slope_p, ..density..), color = "tomato") +
+  xlim(0,1.5)
+```
