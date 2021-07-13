@@ -18,8 +18,11 @@ library(nnet)
 ## Read data
 
 ```{r}
-df <- read_csv("~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/soil_property_extraction_20210323/global_leaf_NP_with_soil_property_from_HWSD_WISE_GSDE_Pmodel_Ndep_GTI_CO2_25032021.csv") %>% 
-  mutate(grass = tree_shrub_Herb == "H") 
+# df <- read_csv("~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/soil_property_extraction_20210323/global_leaf_NP_with_soil_property_from_HWSD_WISE_GSDE_Pmodel_Ndep_GTI_CO2_25032021.csv") %>% 
+#   mutate(grass = tree_shrub_Herb == "H") 
+
+df <- read_csv("~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/leafnp_data_covariates_20210702.csv") %>% 
+  mutate(grass = tree_shrub_Herb == "H")
 
 trgts <- c("leafN", "leafP", "LeafNP")
 preds <- c("ORGC",  "TOTN",  "CNrt",  "ALSA",  "elv", "AWC_CLASS", "T_GRAVEL",  "T_SAND",  "T_SILT",  "T_CLAY",  "T_REF_BULK_DENSITY",  "T_BULK_DENSITY",  "T_OC",  "T_PH_H2O", "T_CEC_CLAY",  "T_CEC_SOIL",  "T_BS",  "T_TEB",  "T_CACO3",  "T_ESP",  "T_ECE",  "PBR", "PHH2O",  "gti",  "ndep",  "co2",  "mat",  "matgs",  "tmonthmin",  "tmonthmax", "ndaysgs",  "mai",  "maigs",  "map",  "pmonthmin",  "mapgs",  "mavgs",  "mav", "alpha",  "vcmax25",  "jmax25",  "gs_accl",  "aet",  "ai",  "cwdx80")
@@ -79,8 +82,8 @@ Out of the box, it gets R2 = 0.47.
 mod_rf_leafn <- ranger(
   leafN ~ ., 
   data = dfs %>% 
-    drop_na() %>% 
-    dplyr::select(leafN, preds),
+    dplyr::select(leafN, preds) %>% 
+    drop_na(),
   mtry = floor(length(preds) / 3),
   respect.unordered.factors = "order",
   seed = 123
@@ -108,9 +111,9 @@ for(i in seq_len(nrow(hyper_grid))) {
   fit <- ranger(
     formula         = leafN ~ ., 
     data = dfs %>% 
+      dplyr::select(leafN, preds) %>% 
       ungroup() %>% 
-      drop_na() %>% 
-      dplyr::select(leafN, preds),
+      drop_na(),
     num.trees       = length(preds) * 10,
     mtry            = hyper_grid$mtry[i],
     min.node.size   = hyper_grid$min.node.size[i],
@@ -156,9 +159,9 @@ set.seed(1982)
 mod_rf_caret_leafn <- train(
   leafN ~ .,
   data = dfs %>% 
+    dplyr::select(leafN, preds) %>% 
     ungroup() %>% 
-    drop_na() %>% 
-    dplyr::select(leafN, preds),
+    drop_na(),
   metric    = "RMSE",
   method    = "ranger",
   tuneGrid  = tune_grid,
@@ -219,9 +222,9 @@ set.seed(1982)
 mod_nn_caret_leafn <- train(
   leafN ~ .,
   data = dfs %>% 
+    dplyr::select(leafN, preds) %>% 
     ungroup() %>% 
-    drop_na() %>% 
-    dplyr::select(leafN, preds),
+    drop_na(),
   metric    = "RMSE",
   method    = "nnet",
   preProc   = c("center", "scale"),
