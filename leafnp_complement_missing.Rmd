@@ -199,7 +199,7 @@ vis_miss(df_pmodel)
 load("data/df_ndep_20210324.RData") # loads df_ndep_agg
 load("data/df_co2_20210324.RData") # df_co2
 load("data/df_gti_20210324.RData") # loads df_gti
-load("data/df_gsde_20210408.RData") # df_gsde
+load("data/df_gsde_20210702.RData") # df_gsde
 load("data/df_wise_20210324.RData") # df_wise
 load("data/df_hwsd_20210324.RData") # df_hwsd
 
@@ -216,6 +216,8 @@ df_my <- df %>%
   left_join(df_gsde, by = "sitename")
 
 vis_miss(df_my, warn_large_data = F)
+vis_miss(df_my %>% dplyr::select(58:68), warn_large_data = F)
+
 ggsave("fig/missing.pdf", width = 12, height = 6)
 ```
 
