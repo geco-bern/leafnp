@@ -320,7 +320,7 @@ Define all variables to be extracted from GSDE. This is not using ingestr.
 ```{r}
 df_sites <- read_csv("data/df_sites_leafnp_20210702.csv")
 
-settings_gsde <- list(varnam =  c("PBR", "PHO", "TP", "TK", "TS"), layer = 1:4)
+settings_gsde <- list(varnam =  c("PBR", "TP", "TK"), layer = 1:4) # incl. before but too many missing: "PHO", "TS"
 
 df_gsde <- ingest(
   df_sites,
@@ -329,6 +329,8 @@ df_gsde <- ingest(
   dir       = "~/data/soil/shangguan"
   ) %>% 
   unnest(data)
+
+visdat::vis_miss(df_gsde)
 
 save(df_gsde, file = "data/df_gsde_20210702.RData")
 ```
