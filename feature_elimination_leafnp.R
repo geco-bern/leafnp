@@ -41,7 +41,7 @@ for (k_index in 1:length(preds)){
   fit_candidates <- list()
   
   ## inner loop for single additional predictor
-  for (ipred in preds_candidate[1:3]){
+  for (ipred in preds_candidate){
     
     # variable vector (new variable + retained variables) used in regression
     preds_after_drop <- preds_retained[-which(preds_retained == ipred)]
