@@ -35,6 +35,10 @@ preds_climate <- c("mat", "matgs", "tmonthmin", "tmonthmax", "ndaysgs", "mai", "
 
 preds_other <- c("elv", "gti", "ndep", "co2")
 
+preds_pmodeloutputs <- c("vcmax25", "jmax25", "gs_accl")
+
+preds_pmodelinputs <- c("mat", "matgs", "mai", "maigs", "mav", "mavgs", "elv", "co2")
+
 vis_miss(df %>% dplyr::select(trgts, preds), warn_large_data = F)
 ```
 
