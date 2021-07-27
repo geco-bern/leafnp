@@ -72,6 +72,8 @@ dfs <- df %>%
               summarise(nobs = n()),
             by = "sitename") %>% 
   ungroup()
+
+saveRDS(dfs, file = "data/dfs_leafnp.rds")
 ```
 
 Visualise missing data.
