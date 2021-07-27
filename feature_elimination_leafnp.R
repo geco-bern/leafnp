@@ -54,7 +54,8 @@ for (k_index in 1:length(preds)){
     # fit random forest model
     ## create generic formula for the model and define preprocessing steps
     pp <- recipe(forml, data = dplyr::select(dfs, leafN, preds)) %>%
-      step_impute_median(all_predictors())
+      # step_impute_median(all_predictors()) %>% 
+      step_medianimpute(all_predictors())   # for old version
     
     ## No actual tuning here
     tune_grid <- expand.grid( .mtry = floor((length(preds_after_drop)-1) / 3), 
