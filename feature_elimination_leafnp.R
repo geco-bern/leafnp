@@ -1,11 +1,10 @@
+#!/usr/bin/env Rscript
+
 library(tidyverse)
 library(ranger)
 library(caret)
-library(visdat)
-library(vip)
-library(pdp)
-library(nnet)
 library(recipes)
+library(readr)
 
 dfs <- read_rds("data/dfs_leafnp.rds")
 
@@ -119,4 +118,5 @@ for (k_index in 1:length(preds)){
 
 }
 
-df_metrics
+save_rds(df_metrics, file = "data/df_metrics.rds")
+
