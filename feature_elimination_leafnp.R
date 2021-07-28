@@ -15,7 +15,7 @@ preds <- c("elv", "mat", "matgs", "tmonthmin", "tmonthmax", "ndaysgs", "mai", "m
            "T_TEB", "T_BS", "T_CEC_SOIL", "T_CEC_CLAY", "T_ECE", "T_ESP", "T_CACO3", "T_OC", "ORGC", "TOTN",
            "CNrt", "ALSA", "PBR", "TP", "TK")
 
-preds <- c("elv", "cwdx80", "ndep", "co2")
+# preds <- c("elv", "cwdx80", "ndep", "co2")
 
 ## specify target variable (as above)
 target <- 'leafN'
@@ -113,8 +113,8 @@ for (k_index in 1:(length(preds)-1)){
   print(paste("Dropping", pred_drop, " R2 = ", rsq_new))
   print("*********************")
   
-  # ## exit feature elimination once R2 drops below 0.45
-  # if (rsq_new < 0.45) break
+  ## exit feature elimination once R2 drops below 0.45
+  if (rsq_new < 0.45) break
   
   ## drop next unnecessary predictor  
   preds_retained <- preds_retained[-which(preds_retained == pred_drop)]
