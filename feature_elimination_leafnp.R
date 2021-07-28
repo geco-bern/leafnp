@@ -15,6 +15,8 @@ preds <- c("elv", "mat", "matgs", "tmonthmin", "tmonthmax", "ndaysgs", "mai", "m
            "T_TEB", "T_BS", "T_CEC_SOIL", "T_CEC_CLAY", "T_ECE", "T_ESP", "T_CACO3", "T_OC", "ORGC", "TOTN",
            "CNrt", "ALSA", "PBR", "TP", "TK")
 
+preds <- c("elv", "cwdx80", "ndep", "co2")
+
 ## specify target variable (as above)
 target <- 'leafN'
 
@@ -56,7 +58,7 @@ for (k_index in 1:(length(preds)-1)){
     
     # fit random forest model
     ## create generic formula for the model and define preprocessing steps
-    pp <- recipe(forml, data = dplyr::select(dfs, leafN, preds)) %>%
+    pp <- recipe(forml, data = dplyr::select(dfs, leafN, preds_after_drop)) %>%
       # step_impute_median(all_predictors()) %>% 
       step_medianimpute(all_predictors())   # for old version
     
@@ -111,8 +113,8 @@ for (k_index in 1:(length(preds)-1)){
   print(paste("Dropping", pred_drop, " R2 = ", rsq_new))
   print("*********************")
   
-  ## exit feature elimination once R2 drops below 0.45
-  if (rsq_new < 0.45) break
+  # ## exit feature elimination once R2 drops below 0.45
+  # if (rsq_new < 0.45) break
   
   ## drop next unnecessary predictor  
   preds_retained <- preds_retained[-which(preds_retained == pred_drop)]
@@ -133,6 +135,14 @@ for (k_index in 1:(length(preds)-1)){
 ## add result from before dropping
 set.seed(1982)
 
+# define formulate with newly-added predictor
+forml  <- as.formula(paste( target, '~', paste(preds, collapse = '+')))
+
+# fit random forest model
+pp <- recipe(forml, data = dplyr::select(dfs, leafN, preds)) %>%
+  # step_impute_median(all_predictors()) %>% 
+  step_medianimpute(all_predictors())   # for old version
+
 fit <- train(
   pp,
   data            = dplyr::select(dfs, leafN, all_of(preds)),
@@ -148,7 +158,7 @@ fit <- train(
 
 # record metrics for all candidates
 rsq <- fit$results$Rsquared
-df_fe_candidates <- bind_rows(df_fe_candidates, tibble(level = 0, pred = NA, rsq = rsq))
+df_fe_candidates <- tibble(level = 0, pred = NA, rsq = rsq)
 
 print(paste("R2 = ", rsq, " with all predictors included"))
 print("*********************")
@@ -164,5 +174,21 @@ df_fe_summary <- df_fe_summary %>%
             rsq = rsq
     )
   )
+
+## nicely readable variable importance
+df_vip <- df_fe %>% 
+  mutate(vip = dplyr::filter(df_fe, is.na(pred)) %>% pull(rsq) - rsq) %>% 
+  dplyr::filter(level == 1) %>% 
+  mutate(pred = fct_reorder(pred, vip)) %>%
+
 saveRDS(df_fe_summary, file = "data/df_fe_summary.rds")
 saveRDS(df_fe, file = "data/df_fe.rds")
+saveRDS(df_vip, file = "data/df_vip.rds")
+
+## plot variable importance determined at level 1 and save as file
+df_vip %>% 
+  ggplot(aes(pred, vip)) +
+  geom_bar(stat = "identity") +
+  coord_flip()
+
+ggsave("fig/vip_fe.pdf")
