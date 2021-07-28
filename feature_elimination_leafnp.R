@@ -9,10 +9,10 @@ library(readr)
 dfs <- read_rds("data/dfs_leafnp.rds")
 
 ## predictors excluding PHO, and TS (too many missing)
-preds <- c("elv", "mat", "matgs", "tmonthmin", "tmonthmax", "ndaysgs", "mai", "maigs", "map", "pmonthmin", 
-           "mapgs", "mavgs", "mav", "alpha", "vcmax25", "jmax25", "gs_accl", "aet", "ai", "cwdx80", "gti", 
-           "ndep", "co2", "T_BULK_DENSITY", "AWC_CLASS", "T_CLAY", "T_SILT", "T_SAND", "T_GRAVEL", "T_PH_H2O", 
-           "T_TEB", "T_BS", "T_CEC_SOIL", "T_CEC_CLAY", "T_ECE", "T_ESP", "T_CACO3", "T_OC", "ORGC", "TOTN", 
+preds <- c("elv", "mat", "matgs", "tmonthmin", "tmonthmax", "ndaysgs", "mai", "maigs", "map", "pmonthmin",
+           "mapgs", "mavgs", "mav", "alpha", "vcmax25", "jmax25", "gs_accl", "aet", "ai", "cwdx80", "gti",
+           "ndep", "co2", "T_BULK_DENSITY", "AWC_CLASS", "T_CLAY", "T_SILT", "T_SAND", "T_GRAVEL", "T_PH_H2O",
+           "T_TEB", "T_BS", "T_CEC_SOIL", "T_CEC_CLAY", "T_ECE", "T_ESP", "T_CACO3", "T_OC", "ORGC", "TOTN",
            "CNrt", "ALSA", "PBR", "TP", "TK")
 
 ## specify target variable (as above)
@@ -25,7 +25,7 @@ preds_candidate <- preds
 preds_retained <- preds
 
 ## work with lists as much as possible (more flexible!)
-df_metrics <- data.frame()
+df_fe_summary <- tibble()
 
 ## common train control params
 traincotrlParams <- trainControl( 
@@ -35,12 +35,15 @@ traincotrlParams <- trainControl(
   savePredictions = "final"
 )
 
+## for output
+df_fe <- tibble()
+
 ## outer loop for k predictors
-for (k_index in 1:length(preds)){
-  
-  # rsq_candidates <- c()
-  df_rsq_candidates <- data.frame()
-  fit_candidates <- list()
+for (k_index in 1:(length(preds)-1)){
+
+  ## for determining variable to drop
+  df_fe_candidates <- tibble()
+  # fit_candidates <- list()
   
   ## inner loop for single additional predictor
   for (ipred in preds_candidate){
@@ -71,53 +74,61 @@ for (k_index in 1:length(preds)){
       tuneGrid        = tune_grid,
       trControl       = traincotrlParams,
       replace         = FALSE,
-      sample.fraction = 0.5,
-      num.trees       = 2000,        # boosted for the final model
-      importance      = "impurity"   # for variable importance analysis, alternative: "permutation"
+      sample.fraction = 0.5
+      # num.trees       = 2000,        # boosted for the final model
+      # importance      = "impurity"   # for variable importance analysis, alternative: "permutation"
     )
     
-    # add model object to list, and name the element according to the added variable
-    fit_candidates[[ ipred ]] <- fit
+    # # add model object to list, and name the element according to the added variable
+    # fit_candidates[[ k_index ]][[ ipred ]] <- fit
     
     # record metrics for all candidates
     rsq <- fit$results$Rsquared
-    df_rsq_candidates <- bind_rows(df_rsq_candidates, data.frame(pred = ipred, rsq = rsq))
-
+    df_fe_candidates <- bind_rows(df_fe_candidates, tibble(level = k_index, pred = ipred, rsq = rsq))
+    
+    print(paste("R2 = ", rsq, " after dropping", ipred))
+    
   }
   
+  ## record for output
+  df_fe <- df_fe %>% 
+    bind_rows(df_fe_candidates)
+  
   ## get name of candidate predictor for which, when dropped, the model still achieved the highest R2.
-  pred_drop <- df_rsq_candidates %>%  # when storing R2 in a data frame
+  pred_drop <- df_fe_candidates %>%  # when storing R2 in a data frame
     arrange(desc(rsq)) %>% 
     slice(1) %>% 
     pull(pred) %>% 
     as.character()
   
-  rsq_new <- df_rsq_candidates %>%  # when storing R2 in a data frame
+  rsq_new <- df_fe_candidates %>%  # when storing R2 in a data frame
     arrange(desc(rsq)) %>% 
     slice(1) %>% 
     pull(rsq) %>% 
     as.numeric()
-
+  
+  print("*********************")
   print(paste("Dropping", pred_drop, " R2 = ", rsq_new))
+  print("*********************")
   
   ## exit feature elimination once R2 drops below 0.45
-  if (rsq_new < 0.45) break 
+  if (rsq_new < 0.45) break
   
   ## drop next unnecessary predictor  
   preds_retained <- preds_retained[-which(preds_retained == pred_drop)]
   
   # record CV r2 of respective model
-  df_metrics <- df_metrics %>% 
+  df_fe_summary <- df_fe_summary %>% 
     bind_rows(
-      data.frame( pred = pred_drop,
+      tibble( pred = pred_drop,
                   rsq = rsq_new
       )
     )
   
   # remove the selected variable from the candidate variable list
   preds_candidate <- preds_candidate[-which(preds_candidate == pred_drop)]
-
+  
 }
 
-save_rds(df_metrics, file = "data/df_metrics.rds")
-
+saveRDS(df_fe_summary, file = "data/df_fe_summary.rds")
+saveRDS(df_fe, file = "data/df_fe.rds")
