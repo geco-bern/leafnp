@@ -130,5 +130,39 @@ for (k_index in 1:(length(preds)-1)){
   
 }
 
+## add result from before dropping
+set.seed(1982)
+
+fit <- train(
+  pp,
+  data            = dplyr::select(dfs, leafN, all_of(preds)),
+  metric          = "RMSE",
+  method          = "ranger",
+  tuneGrid        = tune_grid,
+  trControl       = traincotrlParams,
+  replace         = FALSE,
+  sample.fraction = 0.5)
+
+# # add model object to list, and name the element according to the added variable
+# fit_candidates[[ 0 ]][[ ipred ]] <- fit
+
+# record metrics for all candidates
+rsq <- fit$results$Rsquared
+df_fe_candidates <- bind_rows(df_fe_candidates, tibble(level = 0, pred = NA, rsq = rsq))
+
+print(paste("R2 = ", rsq, " with all predictors included"))
+print("*********************")
+
+## record for output
+df_fe <- df_fe %>% 
+  bind_rows(df_fe_candidates)
+
+# record CV r2 of respective model
+df_fe_summary <- df_fe_summary %>% 
+  bind_rows(
+    tibble( pred = NA,
+            rsq = rsq
+    )
+  )
 saveRDS(df_fe_summary, file = "data/df_fe_summary.rds")
 saveRDS(df_fe, file = "data/df_fe.rds")
