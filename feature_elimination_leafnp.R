@@ -1,4 +1,5 @@
 #!/usr/bin/env Rscript
+args = commandArgs(trailingOnly=TRUE)
 
 library(tidyverse)
 library(ranger)
@@ -8,6 +9,10 @@ library(readr)
 
 dfs <- read_rds("data/dfs_leafnp.rds")
 
+## specify target variable (as above)
+# target <- 'LeafNP'
+target <- as.character(args[1])
+
 ## predictors excluding PHO, and TS (too many missing)
 preds <- c("elv", "mat", "matgs", "tmonthmin", "tmonthmax", "ndaysgs", "mai", "maigs", "map", "pmonthmin",
            "mapgs", "mavgs", "mav", "alpha", "vcmax25", "jmax25", "gs_accl", "aet", "ai", "cwdx80", "gti",
@@ -16,9 +21,6 @@ preds <- c("elv", "mat", "matgs", "tmonthmin", "tmonthmax", "ndaysgs", "mai", "m
            "CNrt", "ALSA", "PBR", "TP", "TK")
 
 # preds <- c("elv", "cwdx80", "ndep", "co2")
-
-## specify target variable (as above)
-target <- 'leafN'
 
 # This is the vector of candidate predictors to be added in the model. To begin with, consider all as candidates.
 preds_candidate <- preds 
@@ -58,9 +60,9 @@ for (k_index in 1:(length(preds)-1)){
     
     # fit random forest model
     ## create generic formula for the model and define preprocessing steps
-    pp <- recipe(forml, data = dplyr::select(dfs, leafN, preds_after_drop)) %>%
-      # step_impute_median(all_predictors()) %>% 
-      step_medianimpute(all_predictors())   # for old version
+    pp <- recipe(forml, data = dplyr::select(dfs, target, preds_after_drop)) %>%
+      step_impute_median(all_predictors())
+      # step_medianimpute(all_predictors())   # for old version
     
     ## No actual tuning here
     tune_grid <- expand.grid( .mtry = floor((length(preds_after_drop)-1) / 3), 
@@ -70,7 +72,7 @@ for (k_index in 1:(length(preds)-1)){
     
     fit <- train(
       pp,
-      data            = dplyr::select(dfs, leafN, all_of(preds_after_drop)),
+      data            = dplyr::select(dfs, target, all_of(preds_after_drop)),
       metric          = "RMSE",
       method          = "ranger",
       tuneGrid        = tune_grid,
@@ -114,7 +116,13 @@ for (k_index in 1:(length(preds)-1)){
   print("*********************")
   
   ## exit feature elimination once R2 drops below 0.45
-  if (rsq_new < 0.45) break
+  if (target == "leafN"){
+    if (rsq_new < 0.45) break
+  } else if (target == "leafP"){
+    if (rsq_new < 0.30) break
+  } else if (target == "LeafNP"){
+    if (rsq_new < 0.17) break
+  }
   
   ## drop next unnecessary predictor  
   preds_retained <- preds_retained[-which(preds_retained == pred_drop)]
@@ -139,13 +147,13 @@ set.seed(1982)
 forml  <- as.formula(paste( target, '~', paste(preds, collapse = '+')))
 
 # fit random forest model
-pp <- recipe(forml, data = dplyr::select(dfs, leafN, preds)) %>%
-  # step_impute_median(all_predictors()) %>% 
-  step_medianimpute(all_predictors())   # for old version
+pp <- recipe(forml, data = dplyr::select(dfs, target, preds)) %>%
+  step_impute_median(all_predictors())
+  # step_medianimpute(all_predictors())   # for old version
 
 fit <- train(
   pp,
-  data            = dplyr::select(dfs, leafN, all_of(preds)),
+  data            = dplyr::select(dfs, target, all_of(preds)),
   metric          = "RMSE",
   method          = "ranger",
   tuneGrid        = tune_grid,
@@ -179,11 +187,11 @@ df_fe_summary <- df_fe_summary %>%
 df_vip <- df_fe %>% 
   mutate(vip = dplyr::filter(df_fe, is.na(pred)) %>% pull(rsq) - rsq) %>% 
   dplyr::filter(level == 1) %>% 
-  mutate(pred = fct_reorder(pred, vip)) %>%
-
-saveRDS(df_fe_summary, file = "data/df_fe_summary.rds")
-saveRDS(df_fe, file = "data/df_fe.rds")
-saveRDS(df_vip, file = "data/df_vip.rds")
+  mutate(pred = fct_reorder(pred, vip))
+  
+write_csv(df_fe_summary, file = "data/df_fe_summary.csv")
+write_csv(df_fe, file = "data/df_fe.csv")
+write_csv(df_vip, file = "data/df_vip.csv")
 
 ## plot variable importance determined at level 1 and save as file
 df_vip %>% 
@@ -192,3 +200,22 @@ df_vip %>%
   coord_flip()
 
 ggsave("fig/vip_fe.pdf")
+
+# df <- read_csv("rankvars_fe_leafnp.csv") %>% 
+#   mutate(order = rev(1:n())) %>% 
+#   mutate(variable = fct_reorder(variable, order))
+# 
+# df %>% 
+#   ggplot(aes(variable, rsq)) +
+#   geom_bar(stat = "identity") +
+#   coord_flip()
+# 
+# df %>% 
+#   dplyr::filter(rsq == max(rsq))
+# 
+# ## determine important set of parameters based on visual inspection: 
+# ## drop all until rsq starts declining
+# vars_not_important <- pull(df, variable) %>% as.vector()
+# vars_not_important <- vars_not_important[!(vars_not_important %in% c("elv", "mav", "ALSA", "ndaysgs"))]
+# preds[!(preds %in% vars_not_important)]
+  
