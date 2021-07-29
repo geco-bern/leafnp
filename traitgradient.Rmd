@@ -22,15 +22,22 @@ df <- df %>%
   right_join(df, by = "sitename")
 ```
 
-Use data only for species with at least five records.
+Use data only for species that appear in at least N sites.
 ```{r}
 use_species <- df %>% 
+  dplyr::select(sitename, Species) %>% 
+  distinct() %>% 
   group_by(Species) %>% 
   summarise(n = n()) %>% 
-  dplyr::filter(n >= 12) %>% 
+  dplyr::filter(n >= 5) %>% 
   pull(Species)
+```
 
+Use data only for sites where at least M species are present.
+```{r}
 use_sites <- df %>% 
+  dplyr::select(sitename, Species) %>% 
+  distinct() %>% 
   group_by(sitename) %>% 
   summarise(n = n()) %>% 
   dplyr::filter(n >= 5) %>% 
@@ -74,11 +81,26 @@ df_tga <- df %>%
   mutate(linmod_n = purrr::map(data, ~lm(leafN ~ leafN_sitemean, data = .)),
          linmod_p = purrr::map(data, ~lm(leafP ~ leafP_sitemean, data = .))) %>% 
   mutate(slope_n = purrr::map_dbl(linmod_n, ~coef(.)[2]),
-         slope_p = purrr::map_dbl(linmod_p, ~coef(.)[2]))
+         slope_p = purrr::map_dbl(linmod_p, ~coef(.)[2])) %>% 
+  left_join(df %>% 
+              dplyr::select(Family, Genus, Species) %>% 
+              distinct(), 
+            by = "Species")
 
 df_tga %>% 
   ggplot() +
+  geom_histogram(aes(slope_n, ..density..), fill = "royalblue", binwidth = 0.1, alpha = 0.5) +
   geom_density(aes(slope_n, ..density..), color = "royalblue") +
+  geom_histogram(aes(slope_p, ..density..), fill = "tomato", binwidth = 0.1, alpha = 0.5) +
   geom_density(aes(slope_p, ..density..), color = "tomato") +
-  xlim(0,1.5)
+  xlim(-2,3)
+
+df_tga %>% 
+  group_by(Family) %>% 
+  summarise(slope_n = mean(slope_n)) %>% 
+  mutate(Family = fct_reorder(Family, slope_n)) %>% 
+  drop_na() %>% 
+  ggplot(aes(Family, slope_n)) +
+  geom_bar(stat = "identity") +
+  coord_flip()
 ```

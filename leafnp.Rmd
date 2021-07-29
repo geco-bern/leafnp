@@ -48,6 +48,11 @@ df %>%
 df %>% 
   ggplot(aes(x = leafP, y = ..density..)) +
   geom_histogram()
+
+df %>% 
+  dplyr::filter(LeafNP < 200) %>% 
+  ggplot(aes(x = LeafNP, y = ..density..)) +
+  geom_histogram()
 ```
 
 ### Complement missing elevation
