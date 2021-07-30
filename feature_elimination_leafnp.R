@@ -189,9 +189,9 @@ df_vip <- df_fe %>%
   dplyr::filter(level == 1) %>% 
   mutate(pred = fct_reorder(pred, vip))
   
-write_csv(df_fe_summary, file = "data/df_fe_summary.csv")
-write_csv(df_fe, file = "data/df_fe.csv")
-write_csv(df_vip, file = "data/df_vip.csv")
+write_csv(df_fe_summary, "data/df_fe_summary.csv")
+write_csv(df_fe, "data/df_fe.csv")
+write_csv(df_vip, "data/df_vip.csv")
 
 ## plot variable importance determined at level 1 and save as file
 df_vip %>% 
@@ -201,21 +201,21 @@ df_vip %>%
 
 ggsave("fig/vip_fe.pdf")
 
-df <- read_csv("rankvars_fe_leafnp.csv") %>%
-  mutate(order = rev(1:n())) %>%
-  mutate(variable = fct_reorder(variable, order))
-
-df %>%
-  ggplot(aes(variable, rsq)) +
-  geom_bar(stat = "identity") +
-  coord_flip()
-
-df %>%
-  dplyr::filter(rsq == max(rsq))
-
-## determine important set of parameters based on visual inspection:
-## drop all until rsq starts declining
-vars_not_important <- pull(df, variable) %>% as.vector()
-vars_not_important <- vars_not_important[!(vars_not_important %in% c("elv", "mav", "ALSA", "ndaysgs"))]
-preds[!(preds %in% vars_not_important)]
-  
+# df <- read_csv("rankvars_fe_leafnp.csv") %>%
+#   mutate(order = rev(1:n())) %>%
+#   mutate(variable = fct_reorder(variable, order))
+# 
+# df %>%
+#   ggplot(aes(variable, rsq)) +
+#   geom_bar(stat = "identity") +
+#   coord_flip()
+# 
+# df %>%
+#   dplyr::filter(rsq == max(rsq))
+# 
+# ## determine important set of parameters based on visual inspection:
+# ## drop all until rsq starts declining
+# vars_not_important <- pull(df, variable) %>% as.vector()
+# vars_not_important <- vars_not_important[!(vars_not_important %in% c("elv", "mav", "ALSA", "ndaysgs"))]
+# preds[!(preds %in% vars_not_important)]
+#   
