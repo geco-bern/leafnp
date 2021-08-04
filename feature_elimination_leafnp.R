@@ -60,7 +60,7 @@ for (k_index in 1:(length(preds)-1)){
     
     # fit random forest model
     ## create generic formula for the model and define preprocessing steps
-    pp <- recipe(forml, data = dplyr::select(dfs, target, preds_after_drop)) %>%
+    pp <- recipe(forml, data = dplyr::select(dfs, target, all_of(preds_after_drop))) %>%
       step_impute_median(all_predictors())
       # step_medianimpute(all_predictors())   # for old version
     
@@ -115,14 +115,14 @@ for (k_index in 1:(length(preds)-1)){
   print(paste("Dropping", pred_drop, " R2 = ", rsq_new))
   print("*********************")
   
-  ## exit feature elimination once R2 drops below 0.45
-  if (target == "leafN"){
-    if (rsq_new < 0.45) break
-  } else if (target == "leafP"){
-    if (rsq_new < 0.30) break
-  } else if (target == "LeafNP"){
-    if (rsq_new < 0.17) break
-  }
+  # ## exit feature elimination once R2 drops below 0.45
+  # if (target == "leafN"){
+  #   if (rsq_new < 0.45) break
+  # } else if (target == "leafP"){
+  #   if (rsq_new < 0.30) break
+  # } else if (target == "LeafNP"){
+  #   if (rsq_new < 0.17) break
+  # }
   
   ## drop next unnecessary predictor  
   preds_retained <- preds_retained[-which(preds_retained == pred_drop)]
@@ -131,7 +131,7 @@ for (k_index in 1:(length(preds)-1)){
   df_fe_summary <- df_fe_summary %>% 
     bind_rows(
       tibble( pred = pred_drop,
-                  rsq = rsq_new
+              rsq = rsq_new
       )
     )
   
@@ -147,7 +147,7 @@ set.seed(1982)
 forml  <- as.formula(paste( target, '~', paste(preds, collapse = '+')))
 
 # fit random forest model
-pp <- recipe(forml, data = dplyr::select(dfs, target, preds)) %>%
+pp <- recipe(forml, data = dplyr::select(dfs, target, all_of(preds))) %>%
   step_impute_median(all_predictors())
   # step_medianimpute(all_predictors())   # for old version
 
@@ -189,9 +189,9 @@ df_vip <- df_fe %>%
   dplyr::filter(level == 1) %>% 
   mutate(pred = fct_reorder(pred, vip))
   
-write_csv(df_fe_summary, "data/df_fe_summary.csv")
-write_csv(df_fe, "data/df_fe.csv")
-write_csv(df_vip, "data/df_vip.csv")
+write_csv(paste0(df_fe_summary, "data/df_fe_summary_", target, ".csv"))
+write_csv(paste0(df_fe, "data/df_fe_", target, ".csv"))
+write_csv(paste0(df_vip, "data/df_vip_", target, ".csv"))
 
 ## plot variable importance determined at level 1 and save as file
 df_vip %>% 
@@ -199,7 +199,7 @@ df_vip %>%
   geom_bar(stat = "identity") +
   coord_flip()
 
-ggsave("fig/vip_fe.pdf")
+ggsave(paste0("fig/vip_fe_", target, ".pdf"))
 
 # df <- read_csv("rankvars_fe_leafnp.csv") %>%
 #   mutate(order = rev(1:n())) %>%
