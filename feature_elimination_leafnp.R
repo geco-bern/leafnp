@@ -189,9 +189,9 @@ df_vip <- df_fe %>%
   dplyr::filter(level == 1) %>% 
   mutate(pred = fct_reorder(pred, vip))
   
-write_csv(paste0(df_fe_summary, "data/df_fe_summary_", target, ".csv"))
-write_csv(paste0(df_fe, "data/df_fe_", target, ".csv"))
-write_csv(paste0(df_vip, "data/df_vip_", target, ".csv"))
+write_csv(df_fe_summary, paste0("data/df_fe_summary_", target, ".csv"))
+write_csv(df_fe, paste0("data/df_fe_", target, ".csv"))
+write_csv(df_vip, paste0("data/df_vip_", target, ".csv"))
 
 ## plot variable importance determined at level 1 and save as file
 df_vip %>% 
