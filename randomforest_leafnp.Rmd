@@ -14,6 +14,8 @@ library(vip)
 library(pdp)
 library(nnet)
 library(recipes)
+library(knitr)
+library(forcats)
 ```
 
 ## Read data
@@ -148,6 +150,7 @@ hyper_grid <- expand.grid(
 
 # execute full cartesian grid search
 for(i in seq_len(nrow(hyper_grid))) {
+  
   # fit model for ith hyperparameter combination
   fit <- ranger(
     formula = leafN ~ ., 
@@ -179,16 +182,19 @@ best_hyper <- hyper_grid %>%
   arrange(rmse) %>% 
   slice(1)
 ```
+
+
 ### Caret Random Forest
 
 Using the caret library with hyperparameter based on best results from above. This is useful to get CV results.
-Slightly better results with imputation, instead of dropping data.
+Slightly better results without imputation, instead of dropping data.
 ```{r}
 ## create generic formula for the model and define preprocessing steps
 pp <- recipe(leafN ~ ., data = dplyr::select(dfs, leafN, preds)) %>%
   
   ## impute by median as part of the recipe
-  step_impute_median(all_predictors())
+  step_medianimpute(all_predictors())
+  # step_impute_median(all_predictors())
   
 
 traincotrlParams <- trainControl( 
@@ -304,37 +310,34 @@ out$gg +
 
 ## Interpret model
 
-Variable importance.
+Simple variable importance.
 
 ```{r}
 p1 <- vip(mod_rf_caret_leafn$finalModel, num_features = 45, bar = FALSE)
 p1
 ```
 
-Partial dependence:
-```{r}
-pdp_pred <- function(object, newdata){
-  results <- mean(predict(object, newdata))$predictions
-  return(results)
-}
+<!-- Partial dependence: -->
+<!-- ```{r} -->
+<!-- pdp_pred <- function(object, newdata){ -->
+<!--   results <- mean(predict(object, newdata))$predictions -->
+<!--   return(results) -->
+<!-- } -->
 
-out <- partial(mod_rf_caret_leafn$finalModel, 
-        train = dfs %>% 
-          ungroup() %>% 
-          dplyr::select(leafN, preds) %>% 
-          dplyr::select(-PBR) %>% 
-          drop_na(),
-        pred.var = "vcmax25",
-        # pred.fun = pdp_pred,
-        grid.resolution = 50
-)
-head(out)
-autoplot(out, rug = TRUE, train = as.data.frame(dfs %>% 
-          ungroup() %>% 
-          drop_na() %>% 
-          dplyr::select(leafN, preds)))
-```
+<!-- out <- partial(mod_rf_caret_leafn$finalModel,  -->
+<!--         train = dfs %>%  -->
+<!--           ungroup() %>%  -->
+<!--           dplyr::select(leafN, preds) %>%  -->
+<!--           dplyr::select(-PBR) %>%  -->
+<!--           drop_na(), -->
+<!--         pred.var = "vcmax25", -->
+<!--         # pred.fun = pdp_pred, -->
+<!--         grid.resolution = 50 -->
+<!-- ) -->
+<!-- head(out) -->
+<!-- autoplot(out, rug = TRUE, train = as.data.frame(dfs %>%  -->
+<!--           ungroup() %>%  -->
+<!--           drop_na() %>%  -->
+<!--           dplyr::select(leafN, preds))) -->
+<!-- ``` -->
 
-## Feature elimination
-
-Backward feature selection based on CV results. Breaks once R2 falls below 0.45. This is implemented by R script `feature_elimination_leafnp.R`.

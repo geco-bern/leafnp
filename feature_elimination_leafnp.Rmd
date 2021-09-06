@@ -1,0 +1,476 @@
+---
+title: "Feature elimination for leafnp"
+author: "Beni Stocker"
+date: "9/6/2021"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(ranger)
+library(caret)
+library(visdat)
+library(vip)
+library(pdp)
+library(nnet)
+library(recipes)
+library(knitr)
+library(forcats)
+```
+
+Obtain outputs from Euler, generated with `feature_elimination_leafnp.R`. Download CSV files into `data/`
+
+Load data aggregated to sites, done in `randomforest_leafnp.Rmd`.
+```{r}
+dfs <- readRDS("data/dfs_leafnp_20210729.rds") %>% 
+  
+  ## otherwise it's not meaningful
+  filter(LeafNP < 70)
+```
+
+## Leaf N
+
+```{r}
+target <- "leafN"
+df_fe_summary <- read_csv(paste0("data/df_fe_summary_", target, ".csv"))
+df_fe <- read_csv(paste0("data/df_fe_", target, ".csv"))
+df_vip <- read_csv(paste0("data/df_vip_", target, ".csv"))
+```
+
+`df_fe` provides the full information about the updated R2 after respective variable was dropped.
+
+With this, we can re-create the feature elimination, getting name of candidate predictor at each step ("level") for which, when dropped, the model still achieved the highest R2.
+
+```{r}
+df_fe_summary_reconstr <- df_fe %>% 
+  group_by(level) %>% 
+  filter(rsq == max(rsq)) %>% 
+  ungroup() %>% 
+  select(-level)
+
+all_equal(df_fe_summary, df_fe_summary_reconstr)
+```
+
+`df_fe_summary` provides information about the updated R2 after respective variable was dropped.
+
+```{r}
+df_fe_summary %>% 
+  mutate(step = rev(1:n())) %>% 
+  mutate(pred = fct_reorder(pred, step)) %>%
+  ggplot(aes(pred, rsq)) +
+  geom_bar(stat = "identity") +
+  coord_flip()
+
+ggsave("fig/rsq_stepwise_leafN.pdf", width = 6, height = 6)
+```
+
+This is a bit misleading as `"ndep"` doesn't appear.
+```{r}
+preds <- c("elv", "mat", "matgs", "tmonthmin", "tmonthmax", "ndaysgs", "mai", "maigs", "map", "pmonthmin",
+           "mapgs", "mavgs", "mav", "alpha", "vcmax25", "jmax25", "gs_accl", "aet", "ai", "cwdx80", "gti",
+           "ndep", "co2", "T_BULK_DENSITY", "AWC_CLASS", "T_CLAY", "T_SILT", "T_SAND", "T_GRAVEL", "T_PH_H2O",
+           "T_TEB", "T_BS", "T_CEC_SOIL", "T_CEC_CLAY", "T_ECE", "T_ESP", "T_CACO3", "T_OC", "ORGC", "TOTN",
+           "CNrt", "ALSA", "PBR", "TP", "TK")
+preds[which(!(preds %in% df_fe_summary$pred))]
+```
+
+This is because it is the only remaining variable in the last model. 
+
+Let's change that so that the column `preds` can be interpreted more clearly.
+
+First, `pred = NA` can be interpreted as a model including all predictors.
+```{r}
+df_fe_summary <- df_fe_summary %>% 
+  mutate(pred = ifelse(is.na(pred), "ALL", pred))
+```
+
+Second, the data frame `df_fe_summary` as written by the feature elimination contains information `pred` interpreted as the variable dropped in the respective step. Instead re-define it so that it is to be interpreted as the variable added, relative to the model of the row below. Like this, the bottom row is for `"ndep"` (single variable-model), and the row above that is for `"mai"` where the rsq is given for the model that contains `"ndep + mai"`. The top row is for the model containing all predictors. Interestingly, the highest rsq (based on 5-fold cross-validation!) is achieved 
+```{r}
+df_fe_summary <- df_fe_summary %>% 
+  filter(pred == "ALL") %>% 
+  bind_rows(df_fe_summary %>% 
+              filter(pred != "ALL")) %>% 
+  mutate(pred_new = lead(pred)) %>%
+  mutate(pred_new = ifelse(is.na(pred_new), "ndep", pred_new)) %>% 
+  select(-pred) %>% 
+  rename(pred = pred_new) %>% 
+  mutate(step = rev(1:n())) %>%
+  mutate(pred = fct_reorder(pred, step))
+```
+
+```{r}
+df_fe_summary %>% 
+  ggplot(aes(pred, rsq)) +
+  geom_bar(stat = "identity") +
+  coord_flip()
+```
+
+This shows that there are negligible gains after ALSA (more generously after cwdx80). In other words, we might as well build a model with just the following predictors:
+```{r}
+longlist <- df_fe_summary %>% 
+  slice(37:45) %>% 
+  pull(pred) %>% 
+  as.character()
+longlist
+
+shortlist <- df_fe_summary %>% 
+  slice(39:45) %>% 
+  pull(pred) %>% 
+  as.character()
+shortlist
+```
+
+### Train final model
+
+With just these (`longlist`), fit again a RF model.
+```{r}
+filn <- "data/mod_rf_caret_leafn.rds"
+
+if (file.exists(filn)){
+  
+  mod_rf_caret_leafn <- readRDS(filn)
+  
+} else {
+ 
+  ## create generic formula for the model and define preprocessing steps
+  pp <- recipe(leafN ~ ., data = dplyr::select(dfs, leafN, longlist)) %>%
+  
+    ## impute by median as part of the recipe
+    step_medianimpute(all_predictors())
+    # step_impute_median(all_predictors())
+
+  traincotrlParams <- trainControl( 
+    method = "cv", 
+    number = 5, 
+    verboseIter = FALSE,
+    savePredictions = "final"
+    )
+  
+  # tune_grid <- expand.grid( .mtry = floor(length(longlist)/3) + c(-2, 0, 2), 
+  #                           .min.node.size = ceiling(best_hyper$min.node.size * c(0.8, 1, 1.2)),
+  #                           .splitrule = "variance"
+  #                           )
+  
+  ## best choice
+  tune_grid <- expand.grid( .mtry = 3, 
+                            .min.node.size = 8,
+                            .splitrule = "variance"
+                            )
+  
+  set.seed(1982)
+  
+  mod_rf_caret_leafn <- train(
+    pp,
+    data            = dplyr::select(dfs, leafN, longlist),
+    metric          = "RMSE",
+    method          = "ranger",
+    tuneGrid        = tune_grid,
+    trControl       = traincotrlParams,
+    replace         = best_hyper$replace,
+    sample.fraction = best_hyper$sample.fraction,
+    num.trees       = 2000,        # boosted for the final model
+    importance      = "impurity"   # for variable importance analysis, alternative: "permutation"
+    )
+  
+  mod_rf_caret_leafn
+  
+  saveRDS(mod_rf_caret_leafn, file = filn)
+}
+```
+
+### Plot CV results
+
+Visualise cross-validation results using results from the best tuned model.
+```{r}
+## get predicted values from cross-validation resamples, take mean across repetitions
+df_cv <- mod_rf_caret_leafn$pred %>% 
+  as_tibble() %>% 
+  dplyr::filter(mtry == mod_rf_caret_leafn$bestTune$mtry, 
+                splitrule == mod_rf_caret_leafn$bestTune$splitrule, 
+                min.node.size == mod_rf_caret_leafn$bestTune$min.node.size) %>%
+  separate(Resample, into = c(NA, "Fold"), sep = "old") %>% 
+  dplyr::rename(idx = rowIndex)
+
+out <- df_cv %>% 
+  rbeni::analyse_modobs2("pred", "obs", type = "heat")
+out$gg +
+  ylim(5,40) + xlim(5,40)
+```
+
+## Leaf P
+
+```{r}
+target <- "leafP"
+df_fe_summary <- read_csv(paste0("data/df_fe_summary_", target, ".csv"))
+df_fe <- read_csv(paste0("data/df_fe_", target, ".csv"))
+df_vip <- read_csv(paste0("data/df_vip_", target, ".csv"))
+```
+
+`df_fe_summary` provides information about the updated R2 after respective variable was dropped. This is a bit misleading as the last dropped variable doesn't appear.
+```{r}
+preds <- c("elv", "mat", "matgs", "tmonthmin", "tmonthmax", "ndaysgs", "mai", "maigs", "map", "pmonthmin",
+           "mapgs", "mavgs", "mav", "alpha", "vcmax25", "jmax25", "gs_accl", "aet", "ai", "cwdx80", "gti",
+           "ndep", "co2", "T_BULK_DENSITY", "AWC_CLASS", "T_CLAY", "T_SILT", "T_SAND", "T_GRAVEL", "T_PH_H2O",
+           "T_TEB", "T_BS", "T_CEC_SOIL", "T_CEC_CLAY", "T_ECE", "T_ESP", "T_CACO3", "T_OC", "ORGC", "TOTN",
+           "CNrt", "ALSA", "PBR", "TP", "TK")
+pred_last <- preds[which(!(preds %in% df_fe_summary$pred))]
+pred_last
+```
+
+This is because it is the only remaining variable in the last model. 
+
+Let's change that so that the column `preds` can be interpreted more clearly.
+
+First, `pred = NA` can be interpreted as a model including all predictors.
+```{r}
+df_fe_summary <- df_fe_summary %>% 
+  mutate(pred = ifelse(is.na(pred), "ALL", pred))
+```
+
+Second, the data frame `df_fe_summary` as written by the feature elimination contains information `pred` interpreted as the variable dropped in the respective step. Instead re-define it so that it is to be interpreted as the variable added, relative to the model of the row below. Like this, the bottom row is for `"ndep"` (single variable-model), and the row above that is for `"mai"` where the rsq is given for the model that contains `"ndep + mai"`. The top row is for the model containing all predictors. Interestingly, the highest rsq (based on 5-fold cross-validation!) is achieved 
+```{r}
+df_fe_summary <- df_fe_summary %>% 
+  filter(pred == "ALL") %>% 
+  bind_rows(df_fe_summary %>% 
+              filter(pred != "ALL")) %>% 
+  mutate(pred_new = lead(pred)) %>%
+  mutate(pred_new = ifelse(is.na(pred_new), pred_last, pred_new)) %>% 
+  select(-pred) %>% 
+  rename(pred = pred_new) %>% 
+  mutate(step = rev(1:n())) %>%
+  mutate(pred = fct_reorder(pred, step))
+```
+
+```{r}
+df_fe_summary %>% 
+  ggplot(aes(pred, rsq)) +
+  geom_bar(stat = "identity") +
+  coord_flip()
+
+ggsave("fig/rsq_stepwise_leafP.pdf", width = 6, height = 6)
+```
+
+This shows that there are negligible gains after `"pmonthmin"`. In other words, we might as well build a model with just the following predictors:
+```{r}
+longlist <- df_fe_summary %>% 
+  slice(37:45) %>% 
+  pull(pred) %>% 
+  as.character()
+longlist
+```
+
+### Train final model
+
+With just these (`longlist`), fit again a RF model.
+```{r}
+filn <- "data/mod_rf_caret_leafp.rds"
+
+if (file.exists(filn)){
+  
+  mod_rf_caret_leafp <- readRDS(filn)
+  
+} else {
+ 
+  ## create generic formula for the model and define preprocessing steps
+  pp <- recipe(leafP ~ ., data = dplyr::select(dfs, leafP, longlist)) %>%
+  
+    ## impute by median as part of the recipe
+    step_medianimpute(all_predictors())
+    # step_impute_median(all_predictors())
+
+  traincotrlParams <- trainControl( 
+    method = "cv", 
+    number = 5, 
+    verboseIter = FALSE,
+    savePredictions = "final"
+    )
+  
+  # tune_grid <- expand.grid( .mtry = floor(length(longlist)/3) + c(-2, 0, 2), 
+  #                           .min.node.size = ceiling(best_hyper$min.node.size * c(0.8, 1, 1.2)),
+  #                           .splitrule = "variance"
+  #                           )
+  
+  ## best choice based on leaf N
+  tune_grid <- expand.grid( .mtry = 3, 
+                            .min.node.size = 8,
+                            .splitrule = "variance"
+                            )
+  
+  set.seed(1982)
+  
+  mod_rf_caret_leafp <- train(
+    pp,
+    data            = dplyr::select(dfs, leafP, longlist),
+    metric          = "RMSE",
+    method          = "ranger",
+    tuneGrid        = tune_grid,
+    trControl       = traincotrlParams,
+    replace         = best_hyper$replace,
+    sample.fraction = best_hyper$sample.fraction,
+    num.trees       = 2000,        # boosted for the final model
+    importance      = "impurity"   # for variable importance analysis, alternative: "permutation"
+    )
+  
+  mod_rf_caret_leafp
+  
+  saveRDS(mod_rf_caret_leafp, file = filn)
+}
+```
+
+### Plot CV results
+
+Visualise cross-validation results using results from the best tuned model.
+```{r}
+## get predicted values from cross-validation resamples, take mean across repetitions
+df_cv <- mod_rf_caret_leafp$pred %>% 
+  as_tibble() %>% 
+  dplyr::filter(mtry == mod_rf_caret_leafp$bestTune$mtry, 
+                splitrule == mod_rf_caret_leafp$bestTune$splitrule, 
+                min.node.size == mod_rf_caret_leafp$bestTune$min.node.size) %>%
+  separate(Resample, into = c(NA, "Fold"), sep = "old") %>% 
+  dplyr::rename(idx = rowIndex)
+
+out <- df_cv %>% 
+  rbeni::analyse_modobs2("pred", "obs", type = "heat")
+out$gg +
+  ylim(0, 5) + xlim(0, 5)
+```
+
+## Leaf N:P
+
+```{r}
+target <- "LeafNP"
+df_fe_summary <- read_csv(paste0("data/df_fe_summary_", target, ".csv"))
+df_fe <- read_csv(paste0("data/df_fe_", target, ".csv"))
+df_vip <- read_csv(paste0("data/df_vip_", target, ".csv"))
+```
+
+`df_fe_summary` provides information about the updated R2 after respective variable was dropped. This is a bit misleading as the last dropped variable doesn't appear.
+```{r}
+preds <- c("elv", "mat", "matgs", "tmonthmin", "tmonthmax", "ndaysgs", "mai", "maigs", "map", "pmonthmin",
+           "mapgs", "mavgs", "mav", "alpha", "vcmax25", "jmax25", "gs_accl", "aet", "ai", "cwdx80", "gti",
+           "ndep", "co2", "T_BULK_DENSITY", "AWC_CLASS", "T_CLAY", "T_SILT", "T_SAND", "T_GRAVEL", "T_PH_H2O",
+           "T_TEB", "T_BS", "T_CEC_SOIL", "T_CEC_CLAY", "T_ECE", "T_ESP", "T_CACO3", "T_OC", "ORGC", "TOTN",
+           "CNrt", "ALSA", "PBR", "TP", "TK")
+pred_last <- preds[which(!(preds %in% df_fe_summary$pred))]
+pred_last
+```
+
+This is because it is the only remaining variable in the last model. 
+
+Let's change that so that the column `preds` can be interpreted more clearly.
+
+First, `pred = NA` can be interpreted as a model including all predictors.
+```{r}
+df_fe_summary <- df_fe_summary %>% 
+  mutate(pred = ifelse(is.na(pred), "ALL", pred))
+```
+
+Second, the data frame `df_fe_summary` as written by the feature elimination contains information `pred` interpreted as the variable dropped in the respective step. Instead re-define it so that it is to be interpreted as the variable added, relative to the model of the row below. Like this, the bottom row is for `"ndep"` (single variable-model), and the row above that is for `"mai"` where the rsq is given for the model that contains `"ndep + mai"`. The top row is for the model containing all predictors. Interestingly, the highest rsq (based on 5-fold cross-validation!) is achieved 
+```{r}
+df_fe_summary <- df_fe_summary %>% 
+  filter(pred == "ALL") %>% 
+  bind_rows(df_fe_summary %>% 
+              filter(pred != "ALL")) %>% 
+  mutate(pred_new = lead(pred)) %>%
+  mutate(pred_new = ifelse(is.na(pred_new), pred_last, pred_new)) %>% 
+  select(-pred) %>% 
+  rename(pred = pred_new) %>% 
+  mutate(step = rev(1:n())) %>%
+  mutate(pred = fct_reorder(pred, step))
+```
+
+```{r}
+df_fe_summary %>% 
+  ggplot(aes(pred, rsq)) +
+  geom_bar(stat = "identity") +
+  coord_flip()
+
+ggsave("fig/rsq_stepwise_leafNP.pdf", width = 6, height = 6)
+```
+
+This shows that there are negligible gains after `"cwdx80"`. In other words, we might as well build a model with just the following predictors:
+```{r}
+longlist <- df_fe_summary %>% 
+  slice(37:45) %>% 
+  pull(pred) %>% 
+  as.character()
+longlist
+```
+
+### Train final model
+
+With just these (`longlist`), fit again a RF model.
+```{r}
+filn <- "data/mod_rf_caret_leafnp.rds"
+
+if (file.exists(filn)){
+  
+  mod_rf_caret_leafnp <- readRDS(filn)
+  
+} else {
+ 
+  ## create generic formula for the model and define preprocessing steps
+  pp <- recipe(LeafNP ~ ., data = dplyr::select(dfs, LeafNP, longlist)) %>%
+  
+    ## impute by median as part of the recipe
+    step_medianimpute(all_predictors())
+    # step_impute_median(all_predictors())
+
+  traincotrlParams <- trainControl( 
+    method = "cv", 
+    number = 5, 
+    verboseIter = FALSE,
+    savePredictions = "final"
+    )
+  
+  # tune_grid <- expand.grid( .mtry = floor(length(longlist)/3) + c(-2, 0, 2),
+  #                           .min.node.size = ceiling(best_hyper$min.node.size * c(0.8, 1, 1.2)),
+  #                           .splitrule = "variance"
+  #                           )
+  
+  ## best choice based on leaf N:P
+  tune_grid <- expand.grid( .mtry = 1,
+                            .min.node.size = 8,
+                            .splitrule = "variance"
+                            )
+  
+  set.seed(1982)
+  
+  mod_rf_caret_leafnp <- train(
+    pp,
+    data            = dplyr::select(dfs, LeafNP, longlist),
+    metric          = "RMSE",
+    method          = "ranger",
+    tuneGrid        = tune_grid,
+    trControl       = traincotrlParams,
+    replace         = best_hyper$replace,
+    sample.fraction = best_hyper$sample.fraction,
+    num.trees       = 2000,        # boosted for the final model
+    importance      = "impurity"   # for variable importance analysis, alternative: "permutation"
+    )
+  
+  saveRDS(mod_rf_caret_leafnp, file = filn)
+  mod_rf_caret_leafnp
+}
+```
+
+### Plot CV results
+
+Visualise cross-validation results using results from the best tuned model.
+```{r}
+## get predicted values from cross-validation resamples, take mean across repetitions
+df_cv <- mod_rf_caret_leafnp$pred %>% 
+  as_tibble() %>% 
+  dplyr::filter(mtry == mod_rf_caret_leafnp$bestTune$mtry, 
+                splitrule == mod_rf_caret_leafnp$bestTune$splitrule, 
+                min.node.size == mod_rf_caret_leafnp$bestTune$min.node.size) %>%
+  separate(Resample, into = c(NA, "Fold"), sep = "old") %>% 
+  dplyr::rename(idx = rowIndex)
+
+out <- df_cv %>% 
+  rbeni::analyse_modobs2("pred", "obs", type = "heat")
+out$gg +
+  ylim(0, 30) + xlim(0, 30)
+```
