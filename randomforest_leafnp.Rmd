@@ -16,6 +16,7 @@ library(nnet)
 library(recipes)
 library(knitr)
 library(forcats)
+library(plotbiomes)
 ```
 
 ## Read data
@@ -42,7 +43,7 @@ preds_pmodeloutputs <- c("vcmax25", "jmax25", "gs_accl")
 
 preds_pmodelinputs <- c("mat", "matgs", "mai", "maigs", "mav", "mavgs", "elv", "co2")
 
-vis_miss(df %>% dplyr::select(all_of(trgts), all_of(preds)), warn_large_data = F)
+#vis_miss(df %>% dplyr::select(all_of(trgts), all_of(preds)), warn_large_data = F)
 ```
 
 Look at some values
@@ -83,7 +84,7 @@ saveRDS(dfs, file = "data/dfs_leafnp_20210729.rds")
 ```
 
 Visualise missing data.
-```{r}
+```{r eval=FALSE}
 vis_miss(dfs %>% dplyr::select(trgts, preds), warn_large_data = F)
 ```
 There are a lot of data points still missing, especially for HWSD data and PFB, and also alpha. Am I using the latest updated dataset? 
@@ -92,6 +93,14 @@ Use only data from sites with at least three observations. Reduces it from 7545 
 ```{r}
 # dfs <- dfs %>% 
 #   dplyr::filter(nobs >= 3)
+```
+
+Plot map and biomes
+
+```{r}
+whittaker_base_plot() +
+  geom_point(data = dfs, aes(x = mat, y = map/10), alpha = 0.3) +
+  theme_classic()
 ```
 
 
