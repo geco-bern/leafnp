@@ -46,6 +46,31 @@ preds_pmodelinputs <- c("mat", "matgs", "mai", "maigs", "mav", "mavgs", "elv", "
 #vis_miss(df %>% dplyr::select(all_of(trgts), all_of(preds)), warn_large_data = F)
 ```
 
+Get most important predictors determined by FE.
+```{r}
+df_fe_summary <- read_csv("data/df_fe_summary_leafN.csv") %>% 
+  filter(pred == "ALL") %>% 
+  bind_rows(df_fe_summary %>% 
+              filter(pred != "ALL")) %>% 
+  mutate(pred_new = lead(pred)) %>%
+  mutate(pred_new = ifelse(is.na(pred_new), "ndep", pred_new)) %>% 
+  select(-pred) %>% 
+  rename(pred = pred_new) %>% 
+  mutate(step = rev(1:n())) %>%
+  mutate(pred = fct_reorder(pred, step))
+
+df_fe_summary %>% 
+  tail(n = 7) %>%
+  ggplot(aes(pred, rsq)) +
+  geom_bar(stat = "identity") +
+  coord_flip()
+
+preds_vip_leafN <- df_fe_summary %>% 
+  tail(n = 7) %>% 
+  pull(pred) %>% 
+  as.vector()
+```
+
 Look at some values
 ```{r}
 df %>% 
@@ -66,7 +91,7 @@ Take site means.
 dfs <- df %>% 
   
   ## remove unplausible leafNP data baed on Dis recommendation
-  dplyr::filter(LeafNP < 200) %>% 
+  dplyr::filter(LeafNP < 70) %>% 
   
   # # xxx test: only grasslands
   # dplyr::filter(grass) %>% 
@@ -110,14 +135,17 @@ whittaker_base_plot() +
 
 A random forest model using the ranger library.
 
-Out of the box, it gets R2 = 0.46.
+Out of the box, it gets R2 = 0.48.
 ```{r}
 mod_rf_leafn <- ranger(
   leafN ~ ., 
   data = dfs %>% 
-    dplyr::select(leafN, all_of(preds)) %>% 
+    # dplyr::select(leafN, all_of(preds)) %>% 
+    dplyr::select(leafN, all_of(preds_vip_leafN)) %>% 
     drop_na(),
-  mtry = floor(length(preds) / 3),
+  # mtry = floor(length(preds) / 3),
+  mtry = floor(length(preds_vip_leafN) / 3),
+  min.node.size = 5,
   respect.unordered.factors = "order",
   seed = 123
 )
@@ -150,8 +178,8 @@ With hyperparameter tuning according to [this](https://bradleyboehmke.github.io/
 ```{r}
 # create hyperparameter grid
 hyper_grid <- expand.grid(
-  mtry = floor(length(preds) * c(.1, .15, .25, .333, .4)),
-  min.node.size = c(3, 5, 10), 
+  mtry = floor(length(preds_vip_leafN)/3), #  floor(length(preds) * c(.1, .25, .333, .4)),
+  min.node.size = c(3, 5, 10, 20), 
   replace = c(TRUE, FALSE),                               
   sample.fraction = c(.5, .7, .8),                       
   rmse = NA                                               
@@ -165,10 +193,10 @@ for(i in seq_len(nrow(hyper_grid))) {
     formula = leafN ~ ., 
     data = dfs %>% 
       ungroup() %>% 
-      dplyr::select(leafN, preds) %>% 
-      dplyr::select(-PBR) %>% 
+      dplyr::select(leafN, preds_vip_leafN) %>%  # preds
+      # dplyr::select(-PBR) %>% 
       drop_na(),
-    num.trees       = length(preds) * 10,
+    num.trees       = length(preds_vip_leafN) * 10,  # preds
     mtry            = hyper_grid$mtry[i],
     min.node.size   = hyper_grid$min.node.size[i],
     replace         = hyper_grid$replace[i],
@@ -199,7 +227,7 @@ Using the caret library with hyperparameter based on best results from above. Th
 Slightly better results without imputation, instead of dropping data.
 ```{r}
 ## create generic formula for the model and define preprocessing steps
-pp <- recipe(leafN ~ ., data = dplyr::select(dfs, leafN, preds)) %>%
+pp <- recipe(leafN ~ ., data = dplyr::select(dfs, leafN, preds_vip_leafN)) %>%
   
   ## impute by median as part of the recipe
   step_medianimpute(all_predictors())
@@ -222,7 +250,7 @@ set.seed(1982)
 
 mod_rf_caret_leafn <- train(
   pp,
-  data            = dplyr::select(dfs, leafN, preds),
+  data            = dplyr::select(dfs, leafN, preds_vip_leafN),
   metric          = "RMSE",
   method          = "ranger",
   tuneGrid        = tune_grid,
@@ -236,8 +264,8 @@ mod_rf_caret_leafn <- train(
 mod_rf_caret_leafn_noimpute <- train(
   leafN ~ .,
   data = dfs %>%
-      dplyr::select(leafN, preds) %>%
-      dplyr::select(-PBR) %>%
+      dplyr::select(leafN, preds_vip_leafN) %>%
+      # dplyr::select(-PBR) %>%
       drop_na(),
   metric          = "RMSE",
   method          = "ranger",
@@ -277,6 +305,25 @@ out <- df_cv %>%
   rbeni::analyse_modobs2("pred", "obs", type = "heat")
 out$gg +
   ylim(5,40) + xlim(5,40)
+```
+### Linear models
+
+Site-level data
+```{r}
+linmod <- lm(leafN ~ .,
+   data = dfs %>%
+      dplyr::select(leafN, preds_vip_leafN))
+summary(linmod)
+```
+
+Random factors
+```{r}
+library(lme4) #lmer
+mod_lmer = lmer(leafN ~ scale(ALSA) + scale(mav) + scale(elv) + scale(co2) + scale(tmonthmin) + scale(mai) + scale(ndep) + (1|Species), 
+  data = df, 
+  na.action = "na.exclude"
+)
+
 ```
 
 <!-- ### Caret Neural Network -->

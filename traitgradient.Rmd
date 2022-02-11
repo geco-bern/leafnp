@@ -67,7 +67,9 @@ df %>%
   group_by(Species) %>% 
   ggplot(aes(x = leafP_sitemean, y = leafP, group = Species)) +
   geom_smooth(method = "lm", se = FALSE, size = 0.5, alpha = 0.2) +
-  geom_abline(intercept=0, slope=1, linetype="dotted")
+  geom_abline(intercept=0, slope=1, linetype="dotted") +
+  coord_equal() +
+  theme_classic()
   # geom_point(alpha = 0.3)
 ```
 

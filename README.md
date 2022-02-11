@@ -7,7 +7,6 @@ The main directory contains analysis files, while the plots subdirectory contain
 Order of execution:
 
 1. Collect data: `leafnp.Rmd`
-2. feature elimination: `feature_elimination_leafnp.Rmd`
-3. Random forest model fitting: `randomforest_leafnp.Rmd`
-4. Trait gradient analysis: `traitgradient.Rmd`
-5. Spatial upscaling: ???
+2. Feature elimination and final Random Fores model fitting: `feature_elimination_leafnp.Rmd`
+5. Trait gradient analysis: `traitgradient.Rmd`
+6. Spatial upscaling: ???
