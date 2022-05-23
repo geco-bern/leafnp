@@ -17,6 +17,7 @@ library(nnet)
 library(recipes)
 library(knitr)
 library(forcats)
+library(rbeni)
 overwrite <- FALSE
 ```
 
@@ -205,36 +206,127 @@ df_cv <- mod_rf_caret_leafn$pred %>%
   dplyr::rename(idx = rowIndex)
 
 out <- df_cv %>% 
-  rbeni::analyse_modobs2("pred", "obs", type = "heat", shortsubtitle = TRUE)
+  analyse_modobs2("pred", "obs", type = "heat", shortsubtitle = TRUE)
 gg1 <- out$gg +
   ylim(5,40) + xlim(5,40) +
   labs(x = "Predicted leaf N (mg/g)", y = "Observed leaf N (mg/g)")
 gg1
+saveRDS(gg1, file = "data/gg1.rds")
 ```
 
-### Example partial dependence analysis
+<!-- ### Example partial dependence analysis -->
 
-```{r}
-library(pdp)
-pred <- function(object, newdata)  {
-  results <- as.vector(predict(object, newdata))
-  return(results)
-}
-
-partial(
-  mod_rf_caret_leafn,
-  train = dplyr::select(dfs, leafN, all_of(shortlist)), 
-  pred.var = "ndep",
-  pred.fun = pred,
-  grid.resolution = 20,
-  plot = TRUE,
-  center = TRUE,
-  plot.engine = "ggplot2"
-)
-```
+<!-- ```{r} -->
+<!-- library(pdp) -->
+<!-- pred <- function(object, newdata)  { -->
+<!--   results <- as.vector(predict(object, newdata)) -->
+<!--   return(results) -->
+<!-- } -->
+<!-- ``` -->
 
 
-## Leaf P
+<!-- #### N deposition -->
+
+<!-- ```{r} -->
+<!-- gg_partial_ndep <- partial( -->
+<!--   mod_rf_caret_leafn, -->
+<!--   train = dplyr::select(dfs, leafN, all_of(shortlist)),  -->
+<!--   pred.var = "ndep", -->
+<!--   pred.fun = pred, -->
+<!--   grid.resolution = 20, -->
+<!--   plot = TRUE, -->
+<!--   center = TRUE, -->
+<!--   plot.engine = "ggplot2", -->
+<!--   alpha = 0.05 -->
+<!-- ) -->
+
+<!-- gg_partial_ndep + -->
+<!--   theme_classic() + -->
+<!--   labs(x = "N deposition") -->
+<!-- ``` -->
+
+<!-- #### Aluminum saturation -->
+
+<!-- ```{r} -->
+<!-- gg_partial_ndep <- partial( -->
+<!--   mod_rf_caret_leafn, -->
+<!--   train = dplyr::select(dfs, leafN, all_of(shortlist)),  -->
+<!--   pred.var = "ALSA", -->
+<!--   pred.fun = pred, -->
+<!--   grid.resolution = 20, -->
+<!--   plot = TRUE, -->
+<!--   center = TRUE, -->
+<!--   plot.engine = "ggplot2", -->
+<!--   alpha = 0.05 -->
+<!-- ) -->
+
+<!-- gg_partial_ndep + -->
+<!--   theme_classic() + -->
+<!--   labs(x = "ALSA") -->
+<!-- ``` -->
+
+<!-- #### VPD -->
+
+<!-- ```{r} -->
+<!-- gg_partial_ndep <- partial( -->
+<!--   mod_rf_caret_leafn, -->
+<!--   train = dplyr::select(dfs, leafN, all_of(shortlist)),  -->
+<!--   pred.var = "mav", -->
+<!--   pred.fun = pred, -->
+<!--   grid.resolution = 20, -->
+<!--   plot = TRUE, -->
+<!--   center = TRUE, -->
+<!--   plot.engine = "ggplot2", -->
+<!--   alpha = 0.05 -->
+<!-- ) -->
+
+<!-- gg_partial_ndep + -->
+<!--   theme_classic() + -->
+<!--   labs(x = "VPD") -->
+<!-- ``` -->
+
+<!-- #### Elevation -->
+
+<!-- ```{r} -->
+<!-- gg_partial_ndep <- partial( -->
+<!--   mod_rf_caret_leafn, -->
+<!--   train = dplyr::select(dfs, leafN, all_of(shortlist)),  -->
+<!--   pred.var = "elv", -->
+<!--   pred.fun = pred, -->
+<!--   grid.resolution = 20, -->
+<!--   plot = TRUE, -->
+<!--   center = TRUE, -->
+<!--   plot.engine = "ggplot2", -->
+<!--   alpha = 0.05 -->
+<!-- ) -->
+
+<!-- gg_partial_ndep + -->
+<!--   theme_classic() + -->
+<!--   labs(x = "Elevation (m)") -->
+<!-- ``` -->
+
+<!-- #### CO2 -->
+
+<!-- ```{r} -->
+<!-- gg_partial_ndep <- partial( -->
+<!--   mod_rf_caret_leafn, -->
+<!--   train = dplyr::select(dfs, leafN, all_of(shortlist)),  -->
+<!--   pred.var = "co2", -->
+<!--   pred.fun = pred, -->
+<!--   grid.resolution = 20, -->
+<!--   plot = TRUE, -->
+<!--   center = TRUE, -->
+<!--   plot.engine = "ggplot2", -->
+<!--   alpha = 0.05 -->
+<!-- ) -->
+
+<!-- gg_partial_ndep + -->
+<!--   theme_classic() + -->
+<!--   labs(x = "CO2 (ppm)") -->
+<!-- ``` -->
+
+
+# Leaf P
 
 ### Get FE results
 
@@ -381,7 +473,7 @@ df_cv <- mod_rf_caret_leafp$pred %>%
   dplyr::rename(idx = rowIndex)
 
 out <- df_cv %>% 
-  rbeni::analyse_modobs2("pred", "obs", type = "heat", shortsubtitle = TRUE)
+  analyse_modobs2("pred", "obs", type = "heat", shortsubtitle = TRUE)
 gg2 <- out$gg +
   ylim(0, 5) + xlim(0, 5) +
   labs(x = "Predicted leaf P (mg/g)", y = "Observed leaf P (mg/g)")
@@ -540,7 +632,7 @@ df_cv <- mod_rf_caret_leafnp$pred %>%
   dplyr::rename(idx = rowIndex)
 
 out <- df_cv %>% 
-  rbeni::analyse_modobs2("pred", "obs", type = "heat", shortsubtitle = TRUE)
+  analyse_modobs2("pred", "obs", type = "heat", shortsubtitle = TRUE)
 gg3 <- out$gg +
   ylim(0, 30) + xlim(0, 30) +
   labs(x = "Predicted leaf N:P", y = "Observed leaf N:P")
