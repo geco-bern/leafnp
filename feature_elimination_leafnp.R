@@ -219,3 +219,12 @@ ggsave(paste0("fig/vip_fe_", target, ".pdf"))
 # vars_not_important <- vars_not_important[!(vars_not_important %in% c("elv", "mav", "ALSA", "ndaysgs"))]
 # preds[!(preds %in% vars_not_important)]
 #   
+
+df_fe_summary <- read_csv("data/df_fe_summary_leafN.csv")
+
+df_fe_summary %>%
+  mutate(pred = fct_reorder(pred, rsq))
+  ggplot(aes(pred, rsq)) +
+  geom_bar(stat = "identity") +
+  coord_flip()
+

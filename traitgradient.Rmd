@@ -9,18 +9,32 @@ output: html_document
 library(tidyverse)
 ```
 
-
+## Prepare data
 ```{r}
 df <- read_csv("~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/leafnp_data_covariates_20210702.csv") %>% 
   dplyr::select(leafN, leafP, LeafNP, Family, Genus, Species, sitename)
 ```
 
+Add site-mean to full data.
 ```{r}
 df <- df %>% 
   group_by(sitename) %>% 
   summarise(leafN_sitemean = mean(leafN), leafP_sitemean = mean(leafP)) %>% 
   right_join(df, by = "sitename")
 ```
+
+Add logarithms
+```{r}
+df <- df %>% 
+  mutate(log_leafN = log10(leafN), 
+         log_leafP = log10(leafP),
+         log_leafN_sitemean = log10(leafN_sitemean),
+         log_leafP_sitemean = log10(leafP_sitemean)
+         )
+```
+
+
+## Filter data
 
 Use data only for species that appear in at least N sites.
 ```{r}
@@ -44,6 +58,8 @@ use_sites <- df %>%
   pull(sitename)
 ```
 
+## TGA Plot
+
 Plot.
 ```{r eval=FALSE}
 df %>% 
@@ -51,6 +67,8 @@ df %>%
   ggplot(aes(x = leafN_sitemean, y = leafN, color = Species)) +
   geom_point()
 ```
+
+### Only lines
 
 Plot just the lines
 ```{r}
@@ -73,6 +91,7 @@ df %>%
   # geom_point(alpha = 0.3)
 ```
 
+### Analysis of slopes
 
 Fit linear regressions by species.
 ```{r}
@@ -105,4 +124,103 @@ df_tga %>%
   ggplot(aes(Family, slope_n)) +
   geom_bar(stat = "identity") +
   coord_flip()
+```
+
+## Logarithmic TGA Plot
+
+Plot.
+```{r eval=FALSE}
+df %>% 
+  dplyr::filter(Species %in% use_species & sitename %in% use_sites) %>% 
+  ggplot(aes(x = log_leafN_sitemean, y = log_leafN, color = Species)) +
+  geom_point()
+```
+
+### Only lines
+
+Plot just the lines
+```{r}
+df %>% 
+  dplyr::filter(Species %in% use_species & sitename %in% use_sites) %>% 
+  group_by(Species) %>% 
+  ggplot(aes(x = log_leafN_sitemean, y = log_leafN, group = Species)) +
+  geom_smooth(method = "lm", se = FALSE, size = 0.2, alpha = 0.2, colour = "royalblue3") +
+  geom_abline(intercept=0, slope=1, linetype="dotted") +
+  theme_classic() +
+  coord_equal() + 
+  labs(x = expression(paste("log"[10], "(site mean leaf N)")), y = expression(paste("log"[10], "(species-level leaf N)")), title = "Leaf N")
+  # geom_point(alpha = 0.3)
+ggsave("fig/tga_leafn_log.pdf", width = 5, height = 4)
+
+df %>% 
+  dplyr::filter(Species %in% use_species & sitename %in% use_sites) %>% 
+  group_by(Species) %>% 
+  ggplot(aes(x = log_leafP_sitemean, y = log_leafP, group = Species)) +
+  geom_smooth(method = "lm", se = FALSE, size = 0.2, alpha = 0.2, colour = "tomato3") +
+  geom_abline(intercept=0, slope=1, linetype="dotted") +
+  coord_equal() +
+  theme_classic() + 
+  labs(x = expression(paste("log"[10], "(site mean leaf P)")), y = expression(paste("log"[10], "(species-level leaf P)")), title = "Leaf P")
+  # geom_point(alpha = 0.3)
+ggsave("fig/tga_leafp_log.pdf", width = 5, height = 4)
+```
+
+### Analysis of slopes
+
+Fit linear regressions by species.
+```{r}
+df_tga <- df %>% 
+  dplyr::filter(Species %in% use_species & sitename %in% use_sites) %>% 
+  group_by(Species) %>% 
+  nest() %>% 
+  mutate(linmod_n = purrr::map(data, ~lm(log_leafN ~ log_leafN_sitemean, data = .)),
+         linmod_p = purrr::map(data, ~lm(log_leafP ~ log_leafP_sitemean, data = .))) %>% 
+  mutate(slope_n = purrr::map_dbl(linmod_n, ~coef(.)[2]),
+         slope_p = purrr::map_dbl(linmod_p, ~coef(.)[2])) %>% 
+  left_join(df %>% 
+              dplyr::select(Family, Genus, Species) %>% 
+              distinct(), 
+            by = "Species")
+
+cols <- c("slope_n" = "royalblue3", "slope_p" = "tomato3")
+df_tga %>% 
+  ggplot() +
+  geom_histogram(aes(slope_n, ..density..), fill = "royalblue3", binwidth = 0.1, alpha = 0.5) +
+  geom_density(aes(slope_n, ..density.., color = "slope_n")) +
+  geom_histogram(aes(slope_p, ..density..), fill = "tomato3", binwidth = 0.1, alpha = 0.5) +
+  geom_density(aes(slope_p, ..density.., color = "slope_p")) +
+  scale_color_manual(values = cols, labels = c("N", "P")) +
+  xlim(-2,3) +
+  theme_classic() +
+  labs(x = "Slope", y = "Density") +
+  geom_vline(xintercept = 1, linetype = "dotted")
+ggsave("fig/tga_slopes_density.pdf", width = 7, height = 5)
+
+df_tga %>% 
+  group_by(Family) %>% 
+  summarise(slope_n = mean(slope_n)) %>% 
+  mutate(Family = fct_reorder(Family, slope_n)) %>% 
+  drop_na() %>% 
+  ggplot(aes(Family, slope_n)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  theme_classic() +
+  labs(y = "Slope", title = "Leaf N") +
+  geom_hline(yintercept = 1.0, linetype = "dotted") +
+  geom_hline(yintercept = 0.0)
+ggsave("fig/tga_slopes_bars_leafn.pdf", width = 7, height = 10)
+
+df_tga %>% 
+  group_by(Family) %>% 
+  summarise(slope_p = mean(slope_p)) %>% 
+  mutate(Family = fct_reorder(Family, slope_p)) %>% 
+  drop_na() %>% 
+  ggplot(aes(Family, slope_p)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  theme_classic() +
+  labs(y = "Slope", title = "Leaf P") +
+  geom_hline(yintercept = 1.0, linetype = "dotted") +
+  geom_hline(yintercept = 0.0)
+ggsave("fig/tga_slopes_bars_leafp.pdf", width = 7, height = 10)
 ```

@@ -193,6 +193,8 @@ if (file.exists(filn) && !overwrite){
 
 Visualise cross-validation results using results from the best tuned model.
 ```{r}
+mod_rf_caret_leafn <- readRDS("data/mod_rf_caret_leafn.rds")
+
 ## get predicted values from cross-validation resamples, take mean across repetitions
 df_cv <- mod_rf_caret_leafn$pred %>% 
   as_tibble() %>% 
