@@ -7,11 +7,17 @@ library(caret)
 library(recipes)
 library(readr)
 
-dfs <- read_rds("data/dfs_leafnp.rds")
-
 ## specify target variable (as above)
 # target <- 'LeafNP'
 target <- as.character(args[1])
+
+dfs <- read_rds("data/dfs_leafnp.rds")
+
+## filter outliers
+if (target == "LeafNP"){
+  dfs <- dfs %>% 
+    filter(LeafNP < 70)
+}
 
 ## predictors excluding PHO, and TS (too many missing)
 preds <- c("elv", "mat", "matgs", "tmonthmin", "tmonthmax", "ndaysgs", "mai", "maigs", "map", "pmonthmin",
