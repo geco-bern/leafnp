@@ -214,116 +214,158 @@ gg1
 saveRDS(gg1, file = "data/gg1.rds")
 ```
 
-<!-- ### Example partial dependence analysis -->
+### Example partial dependence analysis
 
-<!-- ```{r} -->
-<!-- library(pdp) -->
-<!-- pred <- function(object, newdata)  { -->
-<!--   results <- as.vector(predict(object, newdata)) -->
-<!--   return(results) -->
-<!-- } -->
-<!-- ``` -->
+```{r}
+library(pdp)
+pred <- function(object, newdata)  {
+  results <- as.vector(predict(object, newdata))
+  return(results)
+}
+```
 
 
-<!-- #### N deposition -->
+#### N deposition
 
-<!-- ```{r} -->
-<!-- gg_partial_ndep <- partial( -->
-<!--   mod_rf_caret_leafn, -->
-<!--   train = dplyr::select(dfs, leafN, all_of(shortlist)),  -->
-<!--   pred.var = "ndep", -->
-<!--   pred.fun = pred, -->
-<!--   grid.resolution = 20, -->
-<!--   plot = TRUE, -->
-<!--   center = TRUE, -->
-<!--   plot.engine = "ggplot2", -->
-<!--   alpha = 0.05 -->
-<!-- ) -->
+```{r}
+gg_partial_ndep <- partial(
+  mod_rf_caret_leafn,
+  train = dplyr::select(dfs, leafN, all_of(shortlist)),
+  pred.var = "ndep",
+  pred.fun = pred,
+  grid.resolution = 5,
+  plot = TRUE,
+  center = TRUE,
+  plot.engine = "ggplot2",
+  alpha = 0.05
+)
 
-<!-- gg_partial_ndep + -->
-<!--   theme_classic() + -->
-<!--   labs(x = "N deposition") -->
-<!-- ``` -->
+gg_partial_ndep +
+  theme_classic() +
+  labs(x = "N deposition")
+```
 
-<!-- #### Aluminum saturation -->
+#### Aluminum saturation
 
-<!-- ```{r} -->
-<!-- gg_partial_ndep <- partial( -->
-<!--   mod_rf_caret_leafn, -->
-<!--   train = dplyr::select(dfs, leafN, all_of(shortlist)),  -->
-<!--   pred.var = "ALSA", -->
-<!--   pred.fun = pred, -->
-<!--   grid.resolution = 20, -->
-<!--   plot = TRUE, -->
-<!--   center = TRUE, -->
-<!--   plot.engine = "ggplot2", -->
-<!--   alpha = 0.05 -->
-<!-- ) -->
+```{r}
+gg_partial_alsa <- partial(
+  mod_rf_caret_leafn,
+  train = dplyr::select(dfs, leafN, all_of(shortlist)),
+  pred.var = "ALSA",
+  pred.fun = pred,
+  grid.resolution = 5,
+  plot = TRUE,
+  center = TRUE,
+  plot.engine = "ggplot2",
+  alpha = 0.05
+)
 
-<!-- gg_partial_ndep + -->
-<!--   theme_classic() + -->
-<!--   labs(x = "ALSA") -->
-<!-- ``` -->
+gg_partial_alsa +
+  theme_classic() +
+  labs(x = "ALSA")
+```
 
-<!-- #### VPD -->
+#### VPD
 
-<!-- ```{r} -->
-<!-- gg_partial_ndep <- partial( -->
-<!--   mod_rf_caret_leafn, -->
-<!--   train = dplyr::select(dfs, leafN, all_of(shortlist)),  -->
-<!--   pred.var = "mav", -->
-<!--   pred.fun = pred, -->
-<!--   grid.resolution = 20, -->
-<!--   plot = TRUE, -->
-<!--   center = TRUE, -->
-<!--   plot.engine = "ggplot2", -->
-<!--   alpha = 0.05 -->
-<!-- ) -->
+```{r}
+gg_partial_vpd <- partial(
+  mod_rf_caret_leafn,
+  train = dplyr::select(dfs, leafN, all_of(shortlist)),
+  pred.var = "mav",
+  pred.fun = pred,
+  grid.resolution = 5,
+  plot = TRUE,
+  center = TRUE,
+  plot.engine = "ggplot2",
+  alpha = 0.05
+)
 
-<!-- gg_partial_ndep + -->
-<!--   theme_classic() + -->
-<!--   labs(x = "VPD") -->
-<!-- ``` -->
+gg_partial_vpd +
+  theme_classic() +
+  labs(x = "VPD")
+```
 
-<!-- #### Elevation -->
+#### Elevation
 
-<!-- ```{r} -->
-<!-- gg_partial_ndep <- partial( -->
-<!--   mod_rf_caret_leafn, -->
-<!--   train = dplyr::select(dfs, leafN, all_of(shortlist)),  -->
-<!--   pred.var = "elv", -->
-<!--   pred.fun = pred, -->
-<!--   grid.resolution = 20, -->
-<!--   plot = TRUE, -->
-<!--   center = TRUE, -->
-<!--   plot.engine = "ggplot2", -->
-<!--   alpha = 0.05 -->
-<!-- ) -->
+```{r}
+gg_partial_elv <- partial(
+  mod_rf_caret_leafn,
+  train = dplyr::select(dfs, leafN, all_of(shortlist)),
+  pred.var = "elv",
+  pred.fun = pred,
+  grid.resolution = 5,
+  plot = TRUE,
+  center = TRUE,
+  plot.engine = "ggplot2",
+  alpha = 0.05
+)
 
-<!-- gg_partial_ndep + -->
-<!--   theme_classic() + -->
-<!--   labs(x = "Elevation (m)") -->
-<!-- ``` -->
+gg_partial_elv +
+  theme_classic() +
+  labs(x = "Elevation (m)")
+```
 
-<!-- #### CO2 -->
+#### CO2
 
-<!-- ```{r} -->
-<!-- gg_partial_ndep <- partial( -->
-<!--   mod_rf_caret_leafn, -->
-<!--   train = dplyr::select(dfs, leafN, all_of(shortlist)),  -->
-<!--   pred.var = "co2", -->
-<!--   pred.fun = pred, -->
-<!--   grid.resolution = 20, -->
-<!--   plot = TRUE, -->
-<!--   center = TRUE, -->
-<!--   plot.engine = "ggplot2", -->
-<!--   alpha = 0.05 -->
-<!-- ) -->
+```{r}
+gg_partial_ndep <- partial(
+  mod_rf_caret_leafn,
+  train = dplyr::select(dfs, leafN, all_of(shortlist)),
+  pred.var = "co2",
+  pred.fun = pred,
+  grid.resolution = 5,
+  plot = TRUE,
+  center = TRUE,
+  plot.engine = "ggplot2",
+  alpha = 0.05
+)
 
-<!-- gg_partial_ndep + -->
-<!--   theme_classic() + -->
-<!--   labs(x = "CO2 (ppm)") -->
-<!-- ``` -->
+gg_partial_ndep +
+  theme_classic() +
+  labs(x = "CO2 (ppm)")
+```
+
+
+#### Temperature of coldest month
+
+```{r}
+gg_partial_ndep <- partial(
+  mod_rf_caret_leafn,
+  train = dplyr::select(dfs, leafN, all_of(shortlist)),
+  pred.var = "tmonthmin",
+  pred.fun = pred,
+  grid.resolution = 5,
+  plot = TRUE,
+  center = TRUE,
+  plot.engine = "ggplot2",
+  alpha = 0.05
+)
+
+gg_partial_ndep +
+  theme_classic() +
+  labs(x = "CO2 (ppm)")
+```
+
+
+#### Irradiance
+
+```{r}
+gg_partial_ndep <- partial(
+  mod_rf_caret_leafn,
+  train = dplyr::select(dfs, leafN, all_of(shortlist)),
+  pred.var = "mai",
+  pred.fun = pred,
+  grid.resolution = 5,
+  plot = TRUE,
+  center = TRUE,
+  plot.engine = "ggplot2",
+  alpha = 0.05
+)
+
+gg_partial_ndep +
+  theme_classic() +
+  labs(x = "CO2 (ppm)")
+```
 
 
 # Leaf P
