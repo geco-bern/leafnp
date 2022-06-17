@@ -120,6 +120,7 @@ gga1 <- df_fe_summary %>%
   theme_classic()
 gga1
 ggsave("fig/rsq_stepwise_leafN_sub.pdf", width = 6, height = 6)
+write_csv(df_fe_summary, file = "data/df_fe_summary_leafn.csv")
 ```
 
 This shows that there are negligible gains after ALSA (more generously after cwdx80). In other words, we might as well build a model with just the following predictors:
@@ -213,6 +214,7 @@ gg1 <- out$gg +
   labs(x = "Predicted leaf N (mg/g)", y = "Observed leaf N (mg/g)")
 gg1
 saveRDS(gg1, file = "data/gg1.rds")
+write_csv(df_cv, file = "data/df_cv_leafn.csv")
 ```
 
 <!-- ### Example partial dependence analysis -->
@@ -437,6 +439,7 @@ gga2 <- df_fe_summary %>%
   theme_classic()
 gga2
 ggsave("fig/rsq_stepwise_leafP_sub.pdf", width = 6, height = 6)
+write_csv(df_fe_summary, file = "data/df_fe_summary_leafp.csv")
 ```
 
 
@@ -524,6 +527,7 @@ gg2 <- out$gg +
   ylim(0, 5) + xlim(0, 5) +
   labs(x = "Predicted leaf P (mg/g)", y = "Observed leaf P (mg/g)")
 gg2
+write_csv(df_cv, file = "data/df_cv_leafp.csv")
 ```
 
 ## Leaf N:P
@@ -595,6 +599,7 @@ gga3 <- df_fe_summary %>%
   theme_classic()
 gga3
 ggsave("fig/rsq_stepwise_leafNP_sub.pdf", width = 6, height = 6)
+write_csv(df_fe_summary, file = "data/df_fe_summary_leafnp.csv")
 ```
 
 This shows that there are negligible gains after `"cwdx80"`. In other words, we might as well build a model with just the following predictors:
@@ -684,6 +689,7 @@ gg3 <- out$gg +
   ylim(0, 30) + xlim(0, 30) +
   labs(x = "Predicted leaf N:P", y = "Observed leaf N:P")
 gg3
+write_csv(df_cv, file = "data/df_cv_leafnp.csv")
 ```
 
 
