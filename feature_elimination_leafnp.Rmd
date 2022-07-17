@@ -189,7 +189,7 @@ if (file.exists(filn) && !overwrite){
 }
 ```
 
-### Plot CV results
+#### Plot CV results
 
 Visualise cross-validation results using results from the best tuned model.
 ```{r}
@@ -211,6 +211,100 @@ gg1 <- out$gg +
   labs(x = "Predicted leaf N (mg/g)", y = "Observed leaf N (mg/g)")
 gg1
 ```
+
+
+### Train model with full data
+
+Read full species-level data
+```{r}
+# df <- read_csv("~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/soil_property_extraction_20210323/global_leaf_NP_with_soil_property_from_HWSD_WISE_GSDE_Pmodel_Ndep_GTI_CO2_25032021.csv") %>% 
+#   mutate(grass = tree_shrub_Herb == "H") 
+
+df <- read_csv("~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/leafnp_data_covariates_20210702.csv") %>% 
+  mutate(grass = tree_shrub_Herb == "H")
+```
+
+```{r}
+filn <- "data/mod_rf_species_caret_leafn.rds"
+
+if (file.exists(filn) && !overwrite){
+  
+  mod_rf_caret_leafn <- readRDS(filn)
+  
+} else {
+  
+  ## one-hot encoding for Species identity (warning: 3700 species)
+  df1h <- df %>% 
+    recipe(leafN ~ ., data = dplyr::select(df, leafN, all_of(c(shortlist, "Species")))) %>% 
+    step_dummy(Species, one_hot = TRUE) %>% 
+    prep(training = df, retain = TRUE) %>% 
+    juice()
+ 
+  ## create generic formula for the model and define preprocessing steps
+  pp <- recipe(leafN ~ ., data = dplyr::select(df, leafN, all_of(c(shortlist, "Species")))) %>%
+  
+    ## impute by median as part of the recipe
+    # step_medianimpute(all_predictors())
+    step_impute_median(all_predictors())
+
+
+  traincotrlParams <- trainControl( 
+    method = "cv", 
+    number = 5, 
+    verboseIter = FALSE,
+    savePredictions = "final"
+    )
+  
+  ## best choice
+  tune_grid <- expand.grid( .mtry = 3, 
+                            .min.node.size = 8,
+                            .splitrule = "variance"
+                            )
+  
+  set.seed(1982)
+  
+  mod_rf_caret_leafn <- train(
+    pp,
+    data            = dplyr::select(df, leafN, all_of(c(shortlist, "Species"))),
+    metric          = "RMSE",
+    method          = "ranger",
+    tuneGrid        = tune_grid,
+    trControl       = traincotrlParams,
+    replace         = TRUE,
+    sample.fraction = 0.5,
+    num.trees       = 2000,        # boosted for the final model
+    importance      = "impurity"   # for variable importance analysis, alternative: "permutation"
+    )
+  
+  mod_rf_caret_leafn
+  
+  saveRDS(mod_rf_caret_leafn, file = filn)
+}
+```
+
+#### Plot CV results
+
+Visualise cross-validation results using results from the best tuned model.
+```{r}
+mod_rf_caret_leafn <- readRDS("data/mod_rf_caret_leafn.rds")
+
+## get predicted values from cross-validation resamples, take mean across repetitions
+df_cv <- mod_rf_caret_leafn$pred %>% 
+  as_tibble() %>% 
+  dplyr::filter(mtry == mod_rf_caret_leafn$bestTune$mtry, 
+                splitrule == mod_rf_caret_leafn$bestTune$splitrule, 
+                min.node.size == mod_rf_caret_leafn$bestTune$min.node.size) %>%
+  separate(Resample, into = c(NA, "Fold"), sep = "old") %>% 
+  dplyr::rename(idx = rowIndex)
+
+out <- df_cv %>% 
+  rbeni::analyse_modobs2("pred", "obs", type = "heat", shortsubtitle = TRUE)
+gg1 <- out$gg +
+  ylim(5,40) + xlim(5,40) +
+  labs(x = "Predicted leaf N (mg/g)", y = "Observed leaf N (mg/g)")
+gg1
+```
+
 
 ### Example partial dependence analysis
 
