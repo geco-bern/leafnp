@@ -7,11 +7,17 @@ library(caret)
 library(recipes)
 library(readr)
 
-dfs <- read_rds("data/dfs_leafnp.rds")
-
 ## specify target variable (as above)
 # target <- 'LeafNP'
 target <- as.character(args[1])
+
+dfs <- read_rds("data/dfs_leafnp.rds")
+
+## filter outliers
+if (target == "LeafNP"){
+  dfs <- dfs %>% 
+    filter(LeafNP < 70)
+}
 
 ## predictors excluding PHO, and TS (too many missing)
 preds <- c("elv", "mat", "matgs", "tmonthmin", "tmonthmax", "ndaysgs", "mai", "maigs", "map", "pmonthmin",
@@ -220,11 +226,11 @@ ggsave(paste0("fig/vip_fe_", target, ".pdf"))
 # preds[!(preds %in% vars_not_important)]
 #   
 
-df_fe_summary <- read_csv("data/df_fe_summary_leafN.csv")
-
-df_fe_summary %>%
-  mutate(pred = fct_reorder(pred, rsq))
-  ggplot(aes(pred, rsq)) +
-  geom_bar(stat = "identity") +
-  coord_flip()
+# df_fe_summary <- read_csv("data/df_fe_summary_leafN.csv")
+# 
+# df_fe_summary %>%
+#   mutate(pred = fct_reorder(pred, rsq))
+#   ggplot(aes(pred, rsq)) +
+#   geom_bar(stat = "identity") +
+#   coord_flip()
 

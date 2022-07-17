@@ -17,6 +17,7 @@ library(nnet)
 library(recipes)
 library(knitr)
 library(forcats)
+library(rbeni)
 overwrite <- FALSE
 ```
 
@@ -119,6 +120,7 @@ gga1 <- df_fe_summary %>%
   theme_classic()
 gga1
 ggsave("fig/rsq_stepwise_leafN_sub.pdf", width = 6, height = 6)
+write_csv(df_fe_summary, file = "data/df_fe_summary_leafn.csv")
 ```
 
 This shows that there are negligible gains after ALSA (more generously after cwdx80). In other words, we might as well build a model with just the following predictors:
@@ -141,6 +143,7 @@ shortlist
 With just these (`longlist`), fit again a RF model.
 ```{r}
 filn <- "data/mod_rf_caret_leafn.rds"
+overwrite <- FALSE
 
 if (file.exists(filn) && !overwrite){
   
@@ -205,11 +208,13 @@ df_cv <- mod_rf_caret_leafn$pred %>%
   dplyr::rename(idx = rowIndex)
 
 out <- df_cv %>% 
-  rbeni::analyse_modobs2("pred", "obs", type = "heat", shortsubtitle = TRUE)
+  analyse_modobs2("pred", "obs", type = "heat", shortsubtitle = TRUE)
 gg1 <- out$gg +
   ylim(5,40) + xlim(5,40) +
   labs(x = "Predicted leaf N (mg/g)", y = "Observed leaf N (mg/g)")
 gg1
+saveRDS(gg1, file = "data/gg1.rds")
+write_csv(df_cv, file = "data/df_cv_leafn.csv")
 ```
 
 
@@ -328,7 +333,162 @@ partial(
 ```
 
 
-## Leaf P
+
+<!-- ### Example partial dependence analysis -->
+
+<!-- ```{r} -->
+<!-- library(pdp) -->
+<!-- pred <- function(object, newdata)  { -->
+<!--   results <- as.vector(predict(object, newdata)) -->
+<!--   return(results) -->
+<!-- } -->
+<!-- ``` -->
+
+
+<!-- #### N deposition -->
+
+<!-- ```{r} -->
+<!-- gg_partial_ndep <- partial( -->
+<!--   mod_rf_caret_leafn, -->
+<!--   train = dplyr::select(dfs, leafN, all_of(shortlist)), -->
+<!--   pred.var = "ndep", -->
+<!--   pred.fun = pred, -->
+<!--   grid.resolution = 5, -->
+<!--   plot = TRUE, -->
+<!--   center = TRUE, -->
+<!--   plot.engine = "ggplot2", -->
+<!--   alpha = 0.05 -->
+<!-- ) -->
+
+<!-- gg_partial_ndep + -->
+<!--   theme_classic() + -->
+<!--   labs(x = "N deposition") -->
+<!-- ``` -->
+
+<!-- #### Aluminum saturation -->
+
+<!-- ```{r} -->
+<!-- gg_partial_alsa <- partial( -->
+<!--   mod_rf_caret_leafn, -->
+<!--   train = dplyr::select(dfs, leafN, all_of(shortlist)), -->
+<!--   pred.var = "ALSA", -->
+<!--   pred.fun = pred, -->
+<!--   grid.resolution = 5, -->
+<!--   plot = TRUE, -->
+<!--   center = TRUE, -->
+<!--   plot.engine = "ggplot2", -->
+<!--   alpha = 0.05 -->
+<!-- ) -->
+
+<!-- gg_partial_alsa + -->
+<!--   theme_classic() + -->
+<!--   labs(x = "ALSA") -->
+<!-- ``` -->
+
+<!-- #### VPD -->
+
+<!-- ```{r} -->
+<!-- gg_partial_vpd <- partial( -->
+<!--   mod_rf_caret_leafn, -->
+<!--   train = dplyr::select(dfs, leafN, all_of(shortlist)), -->
+<!--   pred.var = "mav", -->
+<!--   pred.fun = pred, -->
+<!--   grid.resolution = 5, -->
+<!--   plot = TRUE, -->
+<!--   center = TRUE, -->
+<!--   plot.engine = "ggplot2", -->
+<!--   alpha = 0.05 -->
+<!-- ) -->
+
+<!-- gg_partial_vpd + -->
+<!--   theme_classic() + -->
+<!--   labs(x = "VPD") -->
+<!-- ``` -->
+
+<!-- #### Elevation -->
+
+<!-- ```{r} -->
+<!-- gg_partial_elv <- partial( -->
+<!--   mod_rf_caret_leafn, -->
+<!--   train = dplyr::select(dfs, leafN, all_of(shortlist)), -->
+<!--   pred.var = "elv", -->
+<!--   pred.fun = pred, -->
+<!--   grid.resolution = 5, -->
+<!--   plot = TRUE, -->
+<!--   center = TRUE, -->
+<!--   plot.engine = "ggplot2", -->
+<!--   alpha = 0.05 -->
+<!-- ) -->
+
+<!-- gg_partial_elv + -->
+<!--   theme_classic() + -->
+<!--   labs(x = "Elevation (m)") -->
+<!-- ``` -->
+
+<!-- #### CO2 -->
+
+<!-- ```{r} -->
+<!-- gg_partial_ndep <- partial( -->
+<!--   mod_rf_caret_leafn, -->
+<!--   train = dplyr::select(dfs, leafN, all_of(shortlist)), -->
+<!--   pred.var = "co2", -->
+<!--   pred.fun = pred, -->
+<!--   grid.resolution = 5, -->
+<!--   plot = TRUE, -->
+<!--   center = TRUE, -->
+<!--   plot.engine = "ggplot2", -->
+<!--   alpha = 0.05 -->
+<!-- ) -->
+
+<!-- gg_partial_ndep + -->
+<!--   theme_classic() + -->
+<!--   labs(x = "CO2 (ppm)") -->
+<!-- ``` -->
+
+
+<!-- #### Temperature of coldest month -->
+
+<!-- ```{r} -->
+<!-- gg_partial_ndep <- partial( -->
+<!--   mod_rf_caret_leafn, -->
+<!--   train = dplyr::select(dfs, leafN, all_of(shortlist)), -->
+<!--   pred.var = "tmonthmin", -->
+<!--   pred.fun = pred, -->
+<!--   grid.resolution = 5, -->
+<!--   plot = TRUE, -->
+<!--   center = TRUE, -->
+<!--   plot.engine = "ggplot2", -->
+<!--   alpha = 0.05 -->
+<!-- ) -->
+
+<!-- gg_partial_ndep + -->
+<!--   theme_classic() + -->
+<!--   labs(x = "CO2 (ppm)") -->
+<!-- ``` -->
+
+
+<!-- #### Irradiance -->
+
+<!-- ```{r} -->
+<!-- gg_partial_ndep <- partial( -->
+<!--   mod_rf_caret_leafn, -->
+<!--   train = dplyr::select(dfs, leafN, all_of(shortlist)), -->
+<!--   pred.var = "mai", -->
+<!--   pred.fun = pred, -->
+<!--   grid.resolution = 5, -->
+<!--   plot = TRUE, -->
+<!--   center = TRUE, -->
+<!--   plot.engine = "ggplot2", -->
+<!--   alpha = 0.05 -->
+<!-- ) -->
+
+<!-- gg_partial_ndep + -->
+<!--   theme_classic() + -->
+<!--   labs(x = "CO2 (ppm)") -->
+<!-- ``` -->
+
+
+# Leaf P
 
 ### Get FE results
 
@@ -376,7 +536,7 @@ df_fe_summary <- df_fe_summary %>%
 
 ```{r}
 df_fe_summary %>% 
-  mutate(highlight = ifelse(pred == "T_GRAVEL", "yes", "no")) %>% 
+  mutate(highlight = ifelse(pred == "vcmax25", "yes", "no")) %>% 
   ggplot(aes(pred, rsq, fill = highlight)) +
   scale_fill_manual( values = c( "yes"="tomato", "no"="gray50" ), guide = FALSE ) +
   geom_bar(stat = "identity") +
@@ -386,8 +546,8 @@ df_fe_summary %>%
 ggsave("fig/rsq_stepwise_leafP.pdf", width = 6, height = 6)
 
 gga2 <- df_fe_summary %>% 
-  mutate(highlight = ifelse(pred == "T_GRAVEL", "yes", "no")) %>% 
-  tail(n = 18) %>% 
+  mutate(highlight = ifelse(pred == "vcmax25", "yes", "no")) %>% 
+  tail(n = 15) %>% 
   ggplot(aes(pred, rsq, fill = highlight)) +
   scale_fill_manual( values = c( "yes"="tomato", "no"="gray50" ), guide = FALSE ) +
   geom_bar(stat = "identity") +
@@ -396,13 +556,14 @@ gga2 <- df_fe_summary %>%
   theme_classic()
 gga2
 ggsave("fig/rsq_stepwise_leafP_sub.pdf", width = 6, height = 6)
+write_csv(df_fe_summary, file = "data/df_fe_summary_leafp.csv")
 ```
 
 
 This shows that there are negligible gains after `"pmonthmin"`. In other words, we might as well build a model with just the following predictors:
 ```{r}
 longlist <- df_fe_summary %>% 
-  slice((nrow(.)-14):nrow(.)) %>% 
+  slice((nrow(.)-11):nrow(.)) %>% 
   pull(pred) %>% 
   as.character()
 longlist
@@ -413,6 +574,7 @@ longlist
 With just these (`longlist`), fit again a RF model.
 ```{r}
 filn <- "data/mod_rf_caret_leafp.rds"
+overwrite <- TRUE
 
 if (file.exists(filn) && !overwrite){
   
@@ -465,6 +627,8 @@ if (file.exists(filn) && !overwrite){
 
 Visualise cross-validation results using results from the best tuned model.
 ```{r}
+mod_rf_caret_leafp <- readRDS(filn)
+
 ## get predicted values from cross-validation resamples, take mean across repetitions
 df_cv <- mod_rf_caret_leafp$pred %>% 
   as_tibble() %>% 
@@ -475,11 +639,12 @@ df_cv <- mod_rf_caret_leafp$pred %>%
   dplyr::rename(idx = rowIndex)
 
 out <- df_cv %>% 
-  rbeni::analyse_modobs2("pred", "obs", type = "heat", shortsubtitle = TRUE)
+  analyse_modobs2("pred", "obs", type = "heat", shortsubtitle = TRUE)
 gg2 <- out$gg +
   ylim(0, 5) + xlim(0, 5) +
   labs(x = "Predicted leaf P (mg/g)", y = "Observed leaf P (mg/g)")
 gg2
+write_csv(df_cv, file = "data/df_cv_leafp.csv")
 ```
 
 ## Leaf N:P
@@ -541,8 +706,8 @@ df_fe_summary %>%
 ggsave("fig/rsq_stepwise_leafNP.pdf", width = 6, height = 6)
 
 gga3 <- df_fe_summary %>% 
-  mutate(highlight = ifelse(pred == "jmax25", "yes", "no")) %>% 
-  tail(n = 17) %>% 
+  mutate(highlight = ifelse(pred == "map", "yes", "no")) %>% 
+  tail(n = 12) %>% 
   ggplot(aes(pred, rsq, fill = highlight)) +
   scale_fill_manual( values = c( "yes"="tomato", "no"="gray50" ), guide = FALSE ) +
   geom_bar(stat = "identity") +
@@ -551,12 +716,13 @@ gga3 <- df_fe_summary %>%
   theme_classic()
 gga3
 ggsave("fig/rsq_stepwise_leafNP_sub.pdf", width = 6, height = 6)
+write_csv(df_fe_summary, file = "data/df_fe_summary_leafnp.csv")
 ```
 
 This shows that there are negligible gains after `"cwdx80"`. In other words, we might as well build a model with just the following predictors:
 ```{r}
 longlist <- df_fe_summary %>% 
-  slice(32:45) %>% 
+  slice((nrow(.)-8):nrow(.)) %>% 
   pull(pred) %>% 
   as.character()
 longlist
@@ -573,6 +739,7 @@ dfs_sub <- dfs %>%
 With just these (`longlist`), fit again a RF model.
 ```{r}
 filn <- "data/mod_rf_caret_leafnp.rds"
+overwrite <- TRUE
 
 if (file.exists(filn) && !overwrite){
   
@@ -634,11 +801,12 @@ df_cv <- mod_rf_caret_leafnp$pred %>%
   dplyr::rename(idx = rowIndex)
 
 out <- df_cv %>% 
-  rbeni::analyse_modobs2("pred", "obs", type = "heat", shortsubtitle = TRUE)
+  analyse_modobs2("pred", "obs", type = "heat", shortsubtitle = TRUE)
 gg3 <- out$gg +
   ylim(0, 30) + xlim(0, 30) +
   labs(x = "Predicted leaf N:P", y = "Observed leaf N:P")
 gg3
+write_csv(df_cv, file = "data/df_cv_leafnp.csv")
 ```
 
 
@@ -647,6 +815,10 @@ gg3
 
 ```{r}
 library(cowplot)
+gg1 <- readRDS("data/gg1.rds")
 plot_grid(gg1, gg2, gg3, labels =  c("a", "b", "c"), ncol = 3)
 ggsave("fig/modobs_all.pdf", width = 12, height = 4)
+
+plot_grid(gga1, gga2, gga3, labels =  c("a", "b", "c"), ncol = 3)
+ggsave("fig/fe_all.pdf", width = 12, height = 4)
 ```
