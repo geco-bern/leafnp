@@ -16,7 +16,7 @@ library(nnet)
 library(recipes)
 library(knitr)
 library(forcats)
-library(plotbiomes)
+# library(plotbiomes)
 ```
 
 ## Read data
@@ -88,25 +88,59 @@ df %>%
 
 Take site means.
 ```{r}
-dfs <- df %>% 
-  
+dfs <- df %>%
+
   ## remove unplausible leafNP data baed on Dis recommendation
-  dplyr::filter(LeafNP < 70) %>% 
-  
+  dplyr::filter(LeafNP < 70) %>%
+
   # # xxx test: only grasslands
-  # dplyr::filter(grass) %>% 
-  
-  mutate(elv_grp = elv) %>% 
-  group_by(lon, lat, elv_grp, sitename) %>% 
-  summarise(across(c(preds, trgts), ~(mean(.x, na.rm = TRUE)))) %>% 
-  left_join(df %>% 
-              group_by(sitename) %>% 
+  # dplyr::filter(grass) %>%
+
+  mutate(elv_grp = elv) %>%
+  group_by(lon, lat, elv_grp, sitename) %>%
+  summarise(across(c(preds, trgts), ~(mean(.x, na.rm = TRUE)))) %>%
+  left_join(df %>%
+              group_by(sitename) %>%
               summarise(nobs = n()),
-            by = "sitename") %>% 
+            by = "sitename") %>%
   ungroup()
 
 saveRDS(dfs, file = "data/dfs_leafnp_20210729.rds")
 ```
+
+<!-- Take site means. -->
+<!-- ```{r} -->
+<!-- # use only data from sites where at least N different species were recorded -->
+<!-- use_sites <- df %>%  -->
+<!--   dplyr::select(sitename, Species) %>%  -->
+<!--   distinct() %>%  -->
+<!--   group_by(sitename) %>%  -->
+<!--   summarise(n = n()) %>%  -->
+<!--   dplyr::filter(n >= 3) %>%  -->
+<!--   pull(sitename) -->
+
+<!-- # df <- df %>%  -->
+<!-- #   filter(sitename %in% use_sites) -->
+
+<!-- dfs <- df %>%  -->
+
+<!--   ## remove unplausible leafNP data baed on Dis recommendation -->
+<!--   dplyr::filter(LeafNP < 70) %>%  -->
+
+<!--   # # xxx test: only grasslands -->
+<!--   # dplyr::filter(grass) %>%  -->
+
+<!--   mutate(elv_grp = elv) %>%  -->
+<!--   group_by(lon, lat, elv_grp, sitename) %>%  -->
+<!--   summarise(across(c(preds, trgts), ~(mean(.x, na.rm = TRUE)))) %>%  -->
+<!--   left_join(df %>%  -->
+<!--               group_by(sitename) %>%  -->
+<!--               summarise(nobs = n()), -->
+<!--             by = "sitename") %>%  -->
+<!--   ungroup() -->
+
+<!-- saveRDS(dfs, file = "data/dfs_leafnp_20220717.rds") -->
+<!-- ``` -->
 
 Visualise missing data.
 ```{r eval=FALSE}
