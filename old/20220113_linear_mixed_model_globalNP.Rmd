@@ -71,6 +71,7 @@ dat$FA <- factor(dat$family);nlevels(dat$FA)
 dat$GE <- factor(dat$genus);nlevels(dat$GE)
 dat$SP <- factor(dat$species);nlevels(dat$SP)
 dat$ID <- factor(dat$id);nlevels(dat$ID)
+
 dat$AWC_CLASS <- as.numeric(dat$AWC_CLASS)
 dat$T_GRAVEL <- as.numeric(dat$T_GRAVEL)
 dat$T_SAND <- as.numeric(dat$T_SAND)

@@ -7,7 +7,31 @@ output: html_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-df_models <- tibble()
+library(tidyverse)
+library(ranger)
+library(caret)
+library(visdat)
+library(vip)
+library(pdp)
+library(nnet)
+library(recipes)
+library(knitr)
+library(forcats)
+library(cowplot)
+
+library(bestNormalize)
+library(metafor)
+library(nlme)
+library(lme4)
+library(lmerTest)
+library(effects)
+library(ggeffects)
+library(MuMIn) # This is the same as Sardan's 2020,output r^2 of the model
+library(glmm.hp) # to get specific r^2
+library(performance)
+
+df_model_fitting <- tibble()
+overwrite <- FALSE
 ```
 
 ## Full data
@@ -17,7 +41,23 @@ df_models <- tibble()
 Read full species-level data
 ```{r}
 df <- read_csv("~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/leafnp_data_covariates_20210702.csv") %>% 
-  mutate(grass = tree_shrub_Herb == "H")
+  mutate(grass = tree_shrub_Herb == "H")  
+```
+
+Define predictor sets.
+```{r}
+trgts <- c("leafN", "leafP", "LeafNP")
+
+## predictors excluding PHO, and TS (too many missing)
+preds <- c("elv", "mat", "matgs", "tmonthmin", "tmonthmax", "ndaysgs", "mai", "maigs", "map", "pmonthmin", "mapgs", "mavgs", "mav", "alpha", "vcmax25", "jmax25", "gs_accl", "aet", "ai", "cwdx80", "gti", "ndep", "co2", "T_BULK_DENSITY", "AWC_CLASS", "T_CLAY", "T_SILT", "T_SAND", "T_GRAVEL", "T_PH_H2O", "T_TEB", "T_BS", "T_CEC_SOIL", "T_CEC_CLAY", "T_ECE", "T_ESP", "T_CACO3", "T_OC", "ORGC", "TOTN", "CNrt", "ALSA", "PBR", "TP", "TK")
+
+preds_soil <- c("gti", "ndep", "T_BULK_DENSITY", "AWC_CLASS", "T_CLAY", "T_SILT", "T_SAND", "T_GRAVEL", "T_PH_H2O", "T_TEB", "T_BS", "T_CEC_SOIL", "T_CEC_CLAY", "T_ECE", "T_ESP", "T_CACO3", "T_OC", "ORGC", "TOTN", "CNrt", "ALSA", "PBR", "TP", "TK")
+  
+preds_climate <- c( "elv", "co2", "mat", "matgs", "tmonthmin", "tmonthmax", "ndaysgs", "mai", "maigs", "map", "pmonthmin", "mapgs", "mavgs", "mav", "alpha", "vcmax25", "jmax25", "gs_accl", "aet", "ai", "cwdx80")
+
+preds_pmodeloutputs <- c("vcmax25", "jmax25", "gs_accl")
+
+preds_pmodelinputs <- c("mat", "matgs", "mai", "maigs", "mav", "mavgs", "elv", "co2")
 ```
 
 Filter to use only data from species that were recorded in at least five different sites.
@@ -35,6 +75,36 @@ df <- df %>%
   filter(Species %in% use_species)
 ```
 
+Prepare date for linear mixed effects modelling. Do data pre-processing as Di Tian implemented it. Transformations are required, but not for Random Forest modelling. Therefore, define separate data objects for the two model types.
+
+Make factors and numeric. No capping to positive numbers done here (as opposed to Di Tian's).
+```{r}
+df_lmm <- df %>%
+  # drop_na() %>%
+  rename( 
+    SP = Species, 
+    FG = FunGroups, 
+    TG = tree_shrub_Herb, 
+    FGID = Dc_Db_Ec_Eb_Hf_Hg,
+    FA = Family, 
+    GE = Genus, 
+    ID = id
+    ) %>%
+  mutate(across(all_of(c("sitename", "FG", "FGID", "TG", "FA", "GE", "SP", "ID")), factor)) %>%
+  mutate(across(all_of(preds), as.numeric))
+```
+
+Apply Yeo-Johnson transformation to make predictors more normally distributed.
+```{r}
+predict_yeojohnson <- function(x){
+  # x[x < 0] <- 0   # How Di did it
+  predict( yeojohnson( x ) )
+}
+
+df_lmm <- df_lmm %>%
+  mutate(across(all_of(preds), predict_yeojohnson))
+```
+
 ### Leaf N
 
 ```{r}
@@ -42,7 +112,43 @@ target <- "leafN"
 shortlist <- readRDS(paste0("data/shortlist_", target, ".rds"))
 ```
 
-#### LME
+#### LMM
+
+```{r}
+mod_lmm_leafn <- lme(
+
+  as.formula(paste("log(", target,") ~ ", paste(shortlist, collapse = " + "))),
+  random = ~1|SP,
+  data = dplyr::select(df_lmm, leafN, all_of(c(shortlist, "SP"))) %>% drop_na()
+
+  )
+
+
+# This is new released July 21 2021 with many indicators
+tmp <- model_performance(mod_lmm_leafn, metrics = "common", verbose = TRUE)
+print(tmp)
+
+# collect results into df
+addrow <- tibble(target = target,
+                 scale = "full",
+                 model = "LMM",
+                 pred = "combined",
+                 rsq = tmp$R2_conditional,
+                 rsq_marg = tmp$R2_marginal,
+                 rmse = tmp$RMSE)
+df_model_fitting <- df_model_fitting %>% 
+  bind_rows(addrow)
+
+# use the ICC for measuring the proportion of the variance explained by the grouping structure in the population (species -> phylo)
+addrow <- tibble(target = target,
+                 scale = "full",
+                 model = "LMM",
+                 pred = "phylo",
+                 rsq = tmp$ICC,
+                 rmse = tmp$RMSE)
+df_model_fitting <- df_model_fitting %>% 
+  bind_rows(addrow)
+```
 
 #### Random Forest
 
@@ -114,11 +220,11 @@ if (file.exists(filn) && !overwrite){
 # collect results into df
 addrow <- tibble(target = target,
                  scale = "full",
-                 model = "rf",
+                 model = "RF",
                  pred = "combined",
                  rsq = mod_rf_caret_leafn_species$results[["Rsquared"]],
                  rmse = mod_rf_caret_leafn_species$results[["RMSE"]])
-df_models <- df_models %>% 
+df_model_fitting <- df_model_fitting %>% 
   bind_rows(addrow)
 ```
 
@@ -184,11 +290,11 @@ if (file.exists(filn) && !overwrite){
 # collect results into df
 addrow <- tibble(target = target,
                  scale = "full",
-                 model = "rf",
+                 model = "RF",
                  pred = "phylo",
                  rsq = mod_rf_caret_leafn_species_phylo$results[["Rsquared"]],
                  rmse = mod_rf_caret_leafn_species_phylo$results[["RMSE"]])
-df_models <- df_models %>% 
+df_model_fitting <- df_model_fitting %>% 
   bind_rows(addrow)
 ```
 
@@ -200,7 +306,43 @@ longlist <- readRDS(paste0("data/longlist_", target, ".rds"))
 ```
 
 
-#### LME
+#### LMM
+
+```{r}
+mod_lmm_leafn <- lme(
+
+  as.formula(paste("log(", target,") ~ ", paste(shortlist, collapse = " + "))),
+  random = ~1|SP,
+  data = dplyr::select(df_lmm, leafP, all_of(c(shortlist, "SP"))) %>% drop_na()
+
+  )
+
+
+# This is new released July 21 2021 with many indicators
+tmp <- model_performance(mod_lmm_leafn, metrics = "common", verbose = TRUE)
+print(tmp)
+
+# collect results into df
+addrow <- tibble(target = target,
+                 scale = "full",
+                 model = "LMM",
+                 pred = "combined",
+                 rsq = tmp$R2_conditional,
+                 rsq_marg = tmp$R2_marginal,
+                 rmse = tmp$RMSE)
+df_model_fitting <- df_model_fitting %>% 
+  bind_rows(addrow)
+
+# use the ICC for measuring the proportion of the variance explained by the grouping structure in the population (species -> phylo)
+addrow <- tibble(target = target,
+                 scale = "full",
+                 model = "LMM",
+                 pred = "phylo",
+                 rsq = tmp$ICC,
+                 rmse = tmp$RMSE)
+df_model_fitting <- df_model_fitting %>% 
+  bind_rows(addrow)
+```
 
 #### Random Forest
 
@@ -268,11 +410,11 @@ if (file.exists(filn) && !overwrite){
 # collect results into df
 addrow <- tibble(target = target,
                  scale = "full",
-                 model = "rf",
+                 model = "RF",
                  pred = "combined",
                  rsq = mod_rf_caret_leafp_species$results[["Rsquared"]],
                  rmse = mod_rf_caret_leafp_species$results[["RMSE"]])
-df_models <- df_models %>% 
+df_model_fitting <- df_model_fitting %>% 
   bind_rows(addrow)
 ```
 
@@ -335,11 +477,11 @@ if (file.exists(filn) && !overwrite){
 # collect results into df
 addrow <- tibble(target = target,
                  scale = "full",
-                 model = "rf",
+                 model = "RF",
                  pred = "phylo",
                  rsq = mod_rf_caret_leafp_species_phylo$results[["Rsquared"]],
                  rmse = mod_rf_caret_leafp_species_phylo$results[["RMSE"]])
-df_models <- df_models %>% 
+df_model_fitting <- df_model_fitting %>% 
   bind_rows(addrow)
 ```
 
@@ -350,7 +492,43 @@ target <- "LeafNP"
 longlist <- readRDS(paste0("data/longlist_", target, ".rds"))
 ```
 
-#### LME
+#### LMM
+
+```{r}
+mod_lmm_leafn <- lme(
+
+  as.formula(paste("log(", target,") ~ ", paste(shortlist, collapse = " + "))),
+  random = ~1|SP,
+  data = dplyr::select(df_lmm, LeafNP, all_of(c(shortlist, "SP"))) %>% drop_na()
+
+  )
+
+
+# This is new released July 21 2021 with many indicators
+tmp <- model_performance(mod_lmm_leafn, metrics = "common", verbose = TRUE)
+print(tmp)
+
+# collect results into df
+addrow <- tibble(target = target,
+                 scale = "full",
+                 model = "LMM",
+                 pred = "combined",
+                 rsq = tmp$R2_conditional,
+                 rsq_marg = tmp$R2_marginal,
+                 rmse = tmp$RMSE)
+df_model_fitting <- df_model_fitting %>% 
+  bind_rows(addrow)
+
+# use the ICC for measuring the proportion of the variance explained by the grouping structure in the population (species -> phylo)
+addrow <- tibble(target = target,
+                 scale = "full",
+                 model = "LMM",
+                 pred = "phylo",
+                 rsq = tmp$ICC,
+                 rmse = tmp$RMSE)
+df_model_fitting <- df_model_fitting %>% 
+  bind_rows(addrow)
+```
 
 #### Random Forest
 
@@ -418,11 +596,11 @@ if (file.exists(filn) && !overwrite){
 # collect results into df
 addrow <- tibble(target = target,
                  scale = "full",
-                 model = "rf",
+                 model = "RF",
                  pred = "combined",
                  rsq = mod_rf_caret_leafnp_species$results[["Rsquared"]],
                  rmse = mod_rf_caret_leafnp_species$results[["RMSE"]])
-df_models <- df_models %>% 
+df_model_fitting <- df_model_fitting %>% 
   bind_rows(addrow)
 ```
 
@@ -485,11 +663,11 @@ if (file.exists(filn) && !overwrite){
 # collect results into df
 addrow <- tibble(target = target,
                  scale = "full",
-                 model = "rf",
+                 model = "RF",
                  pred = "phylo",
                  rsq = mod_rf_caret_leafnp_species_phylo$results[["Rsquared"]],
                  rmse = mod_rf_caret_leafnp_species_phylo$results[["RMSE"]])
-df_models <- df_models %>% 
+df_model_fitting <- df_model_fitting %>% 
   bind_rows(addrow)
 ```
 
@@ -532,13 +710,36 @@ target <- "leafN"
 shortlist <- readRDS(paste0("data/shortlist_", target, ".rds"))
 ```
 
-#### LME
+#### LM
+
+```{r}
+mod_lm_leafn <- lm(
+
+  as.formula(paste("log(", target,") ~ ", paste(shortlist, collapse = " + "))),
+  data = dplyr::select(df_lmm, leafN, all_of(shortlist)) %>% drop_na()
+
+  )
+
+
+# This is new released July 21 2021 with many indicators
+tmp <- model_performance(mod_lm_leafn, metrics = "common", verbose = TRUE)
+print(tmp)
+
+# collect results into df
+addrow <- tibble(target = target,
+                 scale = "aggregated",
+                 model = "LM",
+                 pred = "combined",
+                 rsq = tmp$R2,
+                 rmse = tmp$RMSE)
+df_model_fitting <- df_model_fitting %>% 
+  bind_rows(addrow)
+```
 
 #### Random Forest
 
 ```{r}
 filn <- "data/mod_rf_caret_leafn.rds"
-overwrite <- FALSE
 
 if (file.exists(filn) && !overwrite){
   
@@ -589,11 +790,11 @@ if (file.exists(filn) && !overwrite){
 # collect results into df
 addrow <- tibble(target = target,
                  scale = "aggregated",
-                 model = "rf",
+                 model = "RF",
                  pred = "combined",
-                 rsq = mod_rf_caret_leafn_species$results[["Rsquared"]],
-                 rmse = mod_rf_caret_leafn_species$results[["RMSE"]])
-df_models <- df_models %>% 
+                 rsq = mod_rf_caret_leafn$results[["Rsquared"]],
+                 rmse = mod_rf_caret_leafn$results[["RMSE"]])
+df_model_fitting <- df_model_fitting %>% 
   bind_rows(addrow)
 ```
 
@@ -604,13 +805,36 @@ target <- "leafP"
 longlist <- readRDS(paste0("data/longlist_", target, ".rds"))
 ```
 
-#### LME
+#### LM
+
+```{r}
+mod_lm_leafn <- lm(
+
+  as.formula(paste("log(", target,") ~ ", paste(shortlist, collapse = " + "))),
+  data = dplyr::select(df_lmm, leafP, all_of(shortlist)) %>% drop_na()
+
+  )
+
+
+# This is new released July 21 2021 with many indicators
+tmp <- model_performance(mod_lm_leafn, metrics = "common", verbose = TRUE)
+print(tmp)
+
+# collect results into df
+addrow <- tibble(target = target,
+                 scale = "aggregated",
+                 model = "LM",
+                 pred = "combined",
+                 rsq = tmp$R2,
+                 rmse = tmp$RMSE)
+df_model_fitting <- df_model_fitting %>% 
+  bind_rows(addrow)
+```
 
 #### Random Forest
 
 ```{r}
 filn <- "data/mod_rf_caret_leafp.rds"
-overwrite <- FALSE
 
 if (file.exists(filn) && !overwrite){
   
@@ -661,11 +885,11 @@ if (file.exists(filn) && !overwrite){
 # collect results into df
 addrow <- tibble(target = target,
                  scale = "aggregated",
-                 model = "rf",
+                 model = "RF",
                  pred = "combined",
-                 rsq = mod_rf_caret_leafp_species$results[["Rsquared"]],
-                 rmse = mod_rf_caret_leafp_species$results[["RMSE"]])
-df_models <- df_models %>% 
+                 rsq = mod_rf_caret_leafp$results[["Rsquared"]],
+                 rmse = mod_rf_caret_leafp$results[["RMSE"]])
+df_model_fitting <- df_model_fitting %>% 
   bind_rows(addrow)
 ```
 
@@ -676,13 +900,36 @@ target <- "LeafNP"
 longlist <- readRDS(paste0("data/longlist_", target, ".rds"))
 ```
 
-#### LME
+#### LM
+
+```{r}
+mod_lm_leafn <- lm(
+
+  as.formula(paste("log(", target,") ~ ", paste(shortlist, collapse = " + "))),
+  data = dplyr::select(df_lmm, LeafNP, all_of(shortlist)) %>% drop_na()
+
+  )
+
+
+# This is new released July 21 2021 with many indicators
+tmp <- model_performance(mod_lm_leafn, metrics = "common", verbose = TRUE)
+print(tmp)
+
+# collect results into df
+addrow <- tibble(target = target,
+                 scale = "aggregated",
+                 model = "LM",
+                 pred = "combined",
+                 rsq = tmp$R2,
+                 rmse = tmp$RMSE)
+df_model_fitting <- df_model_fitting %>% 
+  bind_rows(addrow)
+```
 
 #### Random Forest
 
 ```{r}
 filn <- "data/mod_rf_caret_leafnp.rds"
-overwrite <- FALSE
 
 if (file.exists(filn) && !overwrite){
   
@@ -733,10 +980,75 @@ if (file.exists(filn) && !overwrite){
 # collect results into df
 addrow <- tibble(target = target,
                  scale = "aggregated",
-                 model = "rf",
+                 model = "RF",
                  pred = "combined",
-                 rsq = mod_rf_caret_leafnp_species$results[["Rsquared"]],
-                 rmse = mod_rf_caret_leafnp_species$results[["RMSE"]])
-df_models <- df_models %>% 
+                 rsq = mod_rf_caret_leafnp$results[["Rsquared"]],
+                 rmse = mod_rf_caret_leafnp$results[["RMSE"]])
+df_model_fitting <- df_model_fitting %>% 
   bind_rows(addrow)
+```
+
+## Visualisation
+
+```{r}
+# N
+gg1 <- df_model_fitting %>% 
+  filter(target == "leafN" & scale == "aggregated") %>% 
+  ggplot(aes(x = model, y = rsq)) +
+  geom_bar(stat="identity", position = "identity", fill = "darkseagreen4") +
+  theme_classic() +
+  labs(title ="N", subtitle = "Site-level data", y = expression(italic(R)^2), x = "") +
+  scale_y_continuous(limits = c(0, 0.8), expand = c(0, 0))
+
+gg2 <- df_model_fitting %>% 
+  filter(target == "leafN" & scale == "full") %>% 
+  ggplot(aes(x = model, y = rsq, fill = pred)) +
+  geom_bar(stat="identity", position = "identity") +
+  theme_classic() +
+  labs(title ="N", subtitle = "Species-level data", y = expression(italic(R)^2), x = "") +
+  scale_fill_manual(values = c("darkseagreen4", "darkgoldenrod4"), labels = c("Environment", "Phylogenetic"), name = NULL) +
+  scale_y_continuous(limits = c(0, 0.8), expand = c(0, 0))
+
+# P
+gg3 <- df_model_fitting %>% 
+  filter(target == "leafP" & scale == "aggregated") %>% 
+  ggplot(aes(x = model, y = rsq)) +
+  geom_bar(stat="identity", position = "identity", fill = "darkseagreen4") +
+  theme_classic() +
+  labs(title ="P", subtitle = "Site-level data", y = expression(italic(R)^2), x = "") +
+  scale_y_continuous(limits = c(0, 0.8), expand = c(0, 0))
+
+gg4 <- df_model_fitting %>% 
+  filter(target == "leafP" & scale == "full") %>% 
+  ggplot(aes(x = model, y = rsq, fill = pred)) +
+  geom_bar(stat="identity", position = "identity") +
+  theme_classic() +
+  labs(title ="P", subtitle = "Species-level data", y = expression(italic(R)^2), x = "") +
+  scale_fill_manual(values = c("darkseagreen4", "darkgoldenrod4"), labels = c("Environment", "Phylogenetic"), name = NULL) +
+  scale_y_continuous(limits = c(0, 0.8), expand = c(0, 0))
+
+# N:P
+gg5 <- df_model_fitting %>% 
+  filter(target == "LeafNP" & scale == "aggregated") %>% 
+  ggplot(aes(x = model, y = rsq)) +
+  geom_bar(stat="identity", position = "identity", fill = "darkseagreen4") +
+  theme_classic() +
+  labs(title ="N:P", subtitle = "Site-level data", y = expression(italic(R)^2), x = "") +
+  scale_y_continuous(limits = c(0, 0.8), expand = c(0, 0))
+
+gg6 <- df_model_fitting %>% 
+  filter(target == "LeafNP" & scale == "full") %>% 
+  ggplot(aes(x = model, y = rsq, fill = pred)) +
+  geom_bar(stat="identity", position = "identity") +
+  theme_classic() +
+  labs(title ="N:P", subtitle = "Species-level data", y = expression(italic(R)^2), x = "") +
+  scale_fill_manual(values = c("darkseagreen4", "darkgoldenrod4"), labels = c("Environment", "Phylogenetic"), name = NULL) +
+  scale_y_continuous(limits = c(0, 0.8), expand = c(0, 0))
+
+plot_grid(gg1, gg2, rel_widths = c(0.5, 0.8), ncol = 2)
+plot_grid(gg3, gg4, rel_widths = c(0.5, 0.8), ncol = 2)
+plot_grid(gg5, gg6, rel_widths = c(0.5, 0.8), ncol = 2)
+
+plot_grid(gg1, gg2, gg3, gg4, gg5, gg6, rel_widths = c(0.5, 0.8), ncol = 2, labels = c("a", "b", "c", "d", "e", "f"))
+ggsave("fig/bars_model_fitting.pdf", width = 6, height = 8)
 ```
