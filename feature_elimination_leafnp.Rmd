@@ -692,8 +692,6 @@ gg3
 write_csv(df_cv, file = "data/df_cv_leafnp.csv")
 ```
 
-
-
 # Publication figures
 
 ```{r}
