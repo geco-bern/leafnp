@@ -1,0 +1,1174 @@
+---
+title: "lmm_20210907td"
+author: "Di Tian"
+date: "2021/9/6"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+options(digits=4)                     # set number of post-decimal digits in output to 4
+rm(list=ls())                         # clear workspace
+knitr::opts_chunk$set(echo = TRUE)
+memory.limit(102400)
+```
+
+## Linear mixed model analysis
+
+## prepare library
+```{r, warning = "hide", results = "hide"}
+#install.packages("metafor")
+#install.packages("nlme")
+#install.packages("lme4")
+#install.packages("lmerTest")
+#install.packages("effects")
+#install.packages("ggeffects")
+#install.packages("car")
+library(metafor)
+library(ggplot2)
+library(dplyr)
+library(nlme)
+library(lme4)
+library(lmerTest)
+library(effects)
+library(ggeffects)
+library(car)
+library(tidyr)
+library(tidyverse)
+library(ranger)
+library(caret)
+library(visdat)
+library(vip)
+library(pdp)
+library(nnet)
+library(recipes)
+library(knitr)
+library(forcats)
+```
+
+## use the updated dataset
+
+```{r}
+setwd("C:/NEW20210417Di/Euler/Part1_variation_explaination_Random_Forest")
+#look at PBR
+dat_PBR<-read.csv("leafnp_data_covariates_20210702.csv")%>%
+          select("sitename","PBR","TP","TK")%>%
+          group_by(sitename)%>% nest()
+
+#16% of PBR is NA
+#sum(is.na(dat_PBR$PBR))
+#dim(dat_PBR)
+#str(dat_PBR)
+#5944/36414*100
+
+#the updated data need to add PBR for further analysis
+dat<-read.csv("global_NP_phylogenetic_Jul_29_update.csv") %>% 
+     group_by(sitename)%>% nest()%>%
+     left_join(dat_PBR, by="sitename")%>%
+     unnest() %>% dplyr::filter(LeafNP < 200)%>% 
+     rename (species = Species_check, genus = Genus_check, family =  
+                      Family_check, FG = FunGroups, TG = tree_shrub_Herb)
+dat_sp <- dat%>% ungroup()%>%distinct(species)
+```
+
+## Make factors
+
+```{r}
+dat$SITE <- factor(dat$sitename);nlevels(dat$SITE)
+dat$FG <- factor(dat$FG)
+dat$FGID <- factor(dat$Dc_Db_Ec_Eb_Hf_Hg)
+dat$TG <- factor(dat$TG)
+dat$FA <- factor(dat$family);nlevels(dat$FA)
+dat$GE <- factor(dat$genus);nlevels(dat$GE)
+dat$SP <- factor(dat$species);nlevels(dat$SP)
+dat$ID <- factor(dat$id);nlevels(dat$ID)
+dat$AWC_CLASS <- as.numeric(dat$AWC_CLASS)
+dat$T_GRAVEL <- as.numeric(dat$T_GRAVEL)
+dat$T_SAND <- as.numeric(dat$T_SAND)
+dat$T_SILT <- as.numeric(dat$T_SILT)
+dat$T_CLAY <- as.numeric(dat$T_CLAY)
+dat$T_CEC_CLAY <- as.numeric(dat$T_CEC_CLAY)
+dat$T_CEC_SOIL <- as.numeric(dat$T_CEC_SOIL)
+dat$T_BS <- as.numeric(dat$T_BS)
+dat$T_ESP <- as.numeric(dat$T_ESP)
+
+#vis_miss(dat %>% dplyr::select(all_of(trgts), all_of(preds)), warn_large_data = F)
+#use 0 to instead the negative values of environmental variables# 
+dat$ORGC[dat$ORGC < 0] <- 0
+dat$TOTN[dat$TOTN < 0] <- 0
+dat$CNrt[dat$CNrt < 0] <- 0
+dat$ALSA[dat$ALSA < 0] <- 0
+dat$AWC_CLASS[dat$AWC_CLASS < 0] <- 0
+dat$T_GRAVEL[dat$T_GRAVEL < 0] <- 0
+dat$T_SAND[dat$T_SAND < 0] <- 0
+dat$T_SILT[dat$T_SILT < 0] <- 0
+dat$T_CLAY[dat$T_CLAY < 0] <- 0
+dat$T_BULK_DENSITY[dat$T_BULK_DENSITY < 0] <- 0
+dat$T_OC[dat$T_OC < 0] <- 0
+dat$T_CEC_CLAY[dat$T_CEC_CLAY < 0] <- 0
+dat$T_CEC_SOIL[dat$T_CEC_SOIL < 0] <- 0
+dat$T_BS[dat$T_BS < 0] <- 0
+dat$T_TEB[dat$T_TEB < 0] <- 0
+dat$T_CACO3[dat$T_CACO3 < 0] <- 0
+dat$T_ESP[dat$T_ESP < 0] <- 0
+dat$T_ECE[dat$T_ECE < 0] <- 0
+dat$ndep[dat$ndep < 0] <- 0
+dat$co2[dat$co2 < 0] <- 0
+dat$ndaysgs[dat$ndaysgs < 0] <- 0
+dat$mai[dat$mai < 0] <- 0
+dat$maigs[dat$maigs < 0] <- 0
+dat$map[dat$map < 0] <- 0
+dat$pmonthmin[dat$pmonthmin < 0] <- 0
+dat$mapgs[dat$mapgs < 0] <- 0
+dat$mavgs[dat$mavgs < 0] <- 0
+dat$mav[dat$mav < 0] <- 0
+dat$vcmax25[dat$vcmax25 < 0] <- 0
+dat$jmax25[dat$jmax25 < 0] <- 0
+dat$gs_accl[dat$gs_accl < 0] <- 0
+dat$PBR[dat$PBR < 0] <- 0
+dat$TK[dat$TK < 0] <- 0
+dat$TP[dat$TP < 0] <- 0
+```
+#leaf N&P should do log-transformed to avoid right-skewed
+#all variables do Yeo-Johnson transformation to reduce skewness
+
+```{r, warning = "hide"}
+#install.packages("bestNormalize")
+#This is cited from Maire et al. 2015.
+library(bestNormalize)
+dat$elv_trans <- dat$elv %>% yeojohnson()%>% predict()
+dat$ORGC_trans <- dat$ORGC %>% yeojohnson()%>% predict()
+dat$TOTN_trans <- dat$TOTN %>% yeojohnson()%>% predict()
+dat$CNrt_trans <- dat$CNrt %>% yeojohnson()%>% predict()
+dat$ALSA_trans <- dat$ALSA %>% yeojohnson()%>% predict()
+dat$AWC_CLASS_trans <- dat$AWC_CLASS %>% yeojohnson()%>% predict()
+dat$T_GRAVEL_trans <- dat$T_GRAVEL %>% yeojohnson()%>% predict()
+dat$T_SAND_trans <- dat$T_SAND %>% yeojohnson()%>% predict()
+dat$T_SILT_trans <- dat$T_SILT %>% yeojohnson()%>% predict()
+dat$T_CLAY_trans <- dat$T_CLAY %>% yeojohnson()%>% predict()
+dat$T_BULK_DENSITY_trans <- dat$T_BULK_DENSITY %>% yeojohnson()%>% predict()
+dat$T_OC_trans <- dat$T_OC %>% yeojohnson()%>% predict()
+dat$T_CEC_CLAY_trans <- dat$T_CEC_CLAY %>% yeojohnson()%>% predict()
+dat$T_CEC_SOIL_trans <- dat$T_CEC_SOIL %>% yeojohnson()%>% predict()
+dat$T_BS_trans <- dat$T_BS %>% yeojohnson()%>% predict()
+dat$T_TEB_trans <- dat$T_TEB %>% yeojohnson()%>% predict()
+dat$T_CACO3_trans <- dat$T_CACO3 %>% yeojohnson()%>% predict()
+dat$T_ESP_trans <- dat$T_ESP %>% yeojohnson()%>% predict()
+dat$T_ECE_trans <- dat$T_ECE %>% yeojohnson()%>% predict()
+dat$pH_trans <- dat$T_PH_H2O %>% yeojohnson()%>% predict()
+dat$gti_trans <- dat$gti %>% yeojohnson()%>% predict()
+dat$ndep_trans <- dat$ndep %>% yeojohnson()%>% predict()
+dat$co2_trans <- dat$co2 %>% yeojohnson()%>% predict()
+dat$mat_trans <- dat$mat %>% yeojohnson()%>% predict()
+dat$matgs_trans <- dat$matgs %>% yeojohnson()%>% predict()
+dat$tmonthmin_trans <- dat$tmonthmin %>% yeojohnson()%>% predict()
+dat$tmonthmax_trans <- dat$tmonthmax %>% yeojohnson()%>% predict()
+dat$ndaysgs_trans <- dat$ndaysgs %>% yeojohnson()%>% predict()
+dat$mai_trans <- dat$mai %>% yeojohnson()%>% predict()
+dat$maigs_trans <- dat$maigs %>% yeojohnson()%>% predict()
+dat$map_trans <- dat$map %>% yeojohnson()%>% predict()
+dat$pmonthmin_trans <- dat$pmonthmin %>% yeojohnson()%>% predict()
+dat$mapgs_trans <- dat$mapgs %>% yeojohnson()%>% predict()
+dat$mavgs_trans <- dat$mavgs %>% yeojohnson()%>% predict()
+dat$mav_trans <- dat$mav %>% yeojohnson()%>% predict()
+dat$alpha_trans <- dat$alpha %>% yeojohnson()%>% predict()
+dat$vcmax25_trans <- dat$vcmax25 %>% yeojohnson()%>% predict()
+dat$jmax25_trans <- dat$jmax25 %>% yeojohnson()%>% predict()
+dat$gs_accl_trans <- dat$gs_accl %>% yeojohnson()%>% predict()
+dat$aet_trans <- dat$aet %>% yeojohnson()%>% predict()
+dat$ai_trans <- dat$ai %>% yeojohnson()%>% predict()
+dat$cwdx80_trans <- dat$cwdx80 %>% yeojohnson()%>% predict()
+dat$PBR_trans <- dat$PBR %>% yeojohnson()%>% predict()
+dat$TK_trans <- dat$TK %>% yeojohnson()%>% predict()
+dat$TP_trans <- dat$TP %>% yeojohnson()%>% predict()
+```
+
+## subset the data according to functional groups
+```{r}
+df_grass <- subset(dat, TG=="H"|TG=="SubS"|TG=="Subs")
+#df_g<- df_Eb %>% ungroup() %>%distinct(species)
+df_wood <- subset(dat, FG != "Herb" & FG != "Grass" & FG != "Fern")
+df_tree <- subset(dat, TG == "T"|TG == "S/T"|TG == "Semi")
+df_Deci <- subset(dat, FG=="DeciBr"|FG=="Semi")
+df_Conifer <- subset(dat, FG == "Conifer")
+df_Eb <- subset(dat, FG == "EverBr"|FG=="Semi")
+df_other <- subset(dat, TG == "V"|TG == "Fern"|TG == "B")
+dim(dat)  
+#remove NAs from dat
+dat2 <- dat %>% drop_na()
+df_grass2 <- df_grass %>% drop_na()
+df_wood2 <- df_wood %>% drop_na()
+df_tree2 <- df_tree %>% drop_na()
+df_Deci2 <- df_Deci %>% drop_na()
+df_Conifer2 <- df_Conifer %>% drop_na()
+df_Eb2 <- df_Eb %>% drop_na()
+df_other2 <- df_other %>% drop_na()
+```
+#variance partition based on lm analysis
+```{r}
+#leaf N
+NM_null <- lm(log(leafN)~SP,data = dat)
+NM_full1 <- lm(terms(log(leafN)~SP +(mat_trans + matgs_trans + tmonthmin_trans + tmonthmax_trans + 
+                                ndaysgs_trans + mai_trans + maigs_trans + map_trans + pmonthmin_trans +
+                                mapgs_trans + mavgs_trans + mav_trans + alpha_trans + vcmax25_trans +
+                                jmax25_trans + gs_accl_trans + aet_trans + ai_trans + cwdx80_trans)+
+                               (pH_trans + TP_trans + PBR_trans +  TOTN_trans + TK_trans + ORGC_trans +                                           CNrt_trans + ALSA_trans + AWC_CLASS_trans + T_GRAVEL_trans + 
+                                T_BULK_DENSITY_trans + T_CEC_CLAY_trans + T_BS_trans + T_CACO3_trans + 
+                                T_SAND_trans + T_SILT_trans + T_CLAY_trans + T_OC_trans + T_CEC_SOIL_trans +
+                                 T_TEB_trans + T_ESP_trans + T_ECE_trans)+(elv_trans + gti_trans + ndep_trans +                                   co2_trans),keep.order = T),data = dat2)
+
+NM_full2 <- lm(terms(log(leafN)~(mat_trans + matgs_trans + tmonthmin_trans + tmonthmax_trans + 
+                                ndaysgs_trans + mai_trans + maigs_trans + map_trans + pmonthmin_trans +
+                                mapgs_trans + mavgs_trans + mav_trans + alpha_trans + vcmax25_trans +
+                                jmax25_trans + gs_accl_trans + aet_trans + ai_trans + cwdx80_trans)+
+                               (pH_trans + TP_trans + PBR_trans +  TOTN_trans + TK_trans + ORGC_trans +                                           CNrt_trans + ALSA_trans + AWC_CLASS_trans + T_GRAVEL_trans + 
+                                T_BULK_DENSITY_trans + T_CEC_CLAY_trans + T_BS_trans + T_CACO3_trans + 
+                                T_SAND_trans + T_SILT_trans + T_CLAY_trans + T_OC_trans + T_CEC_SOIL_trans +
+                                 T_TEB_trans + T_ESP_trans + T_ECE_trans)+(elv_trans + gti_trans + ndep_trans +                                   co2_trans)+ SP,keep.order = T),data = dat2)
+anova(NM_null)
+anova(NM_full1)
+anova(NM_full2)
+```
+
+```{r}
+#leaf P
+PM_full1 <- lm(terms(log(leafP)~SP +(mat_trans + matgs_trans + tmonthmin_trans + tmonthmax_trans + 
+                                ndaysgs_trans + mai_trans + maigs_trans + map_trans + pmonthmin_trans +
+                                mapgs_trans + mavgs_trans + mav_trans + alpha_trans + vcmax25_trans +
+                                jmax25_trans + gs_accl_trans + aet_trans + ai_trans + cwdx80_trans)+
+                               (pH_trans + TP_trans + PBR_trans +  TOTN_trans + TK_trans + ORGC_trans +                                           CNrt_trans + ALSA_trans + AWC_CLASS_trans + T_GRAVEL_trans + 
+                                T_BULK_DENSITY_trans + T_CEC_CLAY_trans + T_BS_trans + T_CACO3_trans + 
+                                T_SAND_trans + T_SILT_trans + T_CLAY_trans + T_OC_trans + T_CEC_SOIL_trans +
+                                 T_TEB_trans + T_ESP_trans + T_ECE_trans)+(elv_trans + gti_trans + ndep_trans +                                   co2_trans),keep.order = T),data = dat2)
+
+PM_full2 <- lm(terms(log(leafP)~(mat_trans + matgs_trans + tmonthmin_trans + tmonthmax_trans + 
+                                ndaysgs_trans + mai_trans + maigs_trans + map_trans + pmonthmin_trans +
+                                mapgs_trans + mavgs_trans + mav_trans + alpha_trans + vcmax25_trans +
+                                jmax25_trans + gs_accl_trans + aet_trans + ai_trans + cwdx80_trans)+
+                               (pH_trans + TP_trans + PBR_trans +  TOTN_trans + TK_trans + ORGC_trans +                                           CNrt_trans + ALSA_trans + AWC_CLASS_trans + T_GRAVEL_trans + 
+                                T_BULK_DENSITY_trans + T_CEC_CLAY_trans + T_BS_trans + T_CACO3_trans + 
+                                T_SAND_trans + T_SILT_trans + T_CLAY_trans + T_OC_trans + T_CEC_SOIL_trans +
+                                 T_TEB_trans + T_ESP_trans + T_ECE_trans)+(elv_trans + gti_trans + ndep_trans +                                   co2_trans)+ SP,keep.order = T),data = dat2)
+anova(PM_full1)
+anova(PM_full2)
+```
+
+```{r}
+#leaf N:P
+NPM_full1 <- lm(terms(log(LeafNP)~SP +(mat_trans + matgs_trans + tmonthmin_trans + tmonthmax_trans + 
+                                ndaysgs_trans + mai_trans + maigs_trans + map_trans + pmonthmin_trans +
+                                mapgs_trans + mavgs_trans + mav_trans + alpha_trans + vcmax25_trans +
+                                jmax25_trans + gs_accl_trans + aet_trans + ai_trans + cwdx80_trans)+
+                               (pH_trans + TP_trans + PBR_trans +  TOTN_trans + TK_trans + ORGC_trans +                                           CNrt_trans + ALSA_trans + AWC_CLASS_trans + T_GRAVEL_trans + 
+                                T_BULK_DENSITY_trans + T_CEC_CLAY_trans + T_BS_trans + T_CACO3_trans + 
+                                T_SAND_trans + T_SILT_trans + T_CLAY_trans + T_OC_trans + T_CEC_SOIL_trans +
+                                 T_TEB_trans + T_ESP_trans + T_ECE_trans)+(elv_trans + gti_trans + ndep_trans +                                   co2_trans),keep.order = T),data = dat2)
+
+NPM_full2 <- lm(terms(log(LeafNP)~(mat_trans + matgs_trans + tmonthmin_trans + tmonthmax_trans + 
+                                ndaysgs_trans + mai_trans + maigs_trans + map_trans + pmonthmin_trans +
+                                mapgs_trans + mavgs_trans + mav_trans + alpha_trans + vcmax25_trans +
+                                jmax25_trans + gs_accl_trans + aet_trans + ai_trans + cwdx80_trans)+
+                               (pH_trans + TP_trans + PBR_trans +  TOTN_trans + TK_trans + ORGC_trans +                                           CNrt_trans + ALSA_trans + AWC_CLASS_trans + T_GRAVEL_trans + 
+                                T_BULK_DENSITY_trans + T_CEC_CLAY_trans + T_BS_trans + T_CACO3_trans + 
+                                T_SAND_trans + T_SILT_trans + T_CLAY_trans + T_OC_trans + T_CEC_SOIL_trans +
+                                 T_TEB_trans + T_ESP_trans + T_ECE_trans)+(elv_trans + gti_trans + ndep_trans +                                   co2_trans)+ SP,keep.order = T),data = dat2)
+anova(NPM_full1)
+anova(NPM_full2)
+```
+
+## explaination of SP and environment on woody species 
+
+```{r}
+# for df_wood [wood = (FG != "Herb" & FG != "Grass" & FG != "Fern")]
+#leaf N 
+NM_wood1 <- lm(terms(log(leafN)~SP +(mat_trans + matgs_trans + tmonthmin_trans + tmonthmax_trans + 
+                                ndaysgs_trans + mai_trans + maigs_trans + map_trans + pmonthmin_trans +
+                                mapgs_trans + mavgs_trans + mav_trans + alpha_trans + vcmax25_trans +
+                                jmax25_trans + gs_accl_trans + aet_trans + ai_trans + cwdx80_trans)+
+                               (pH_trans + TP_trans + PBR_trans +  TOTN_trans + TK_trans + ORGC_trans +                                           CNrt_trans + ALSA_trans + AWC_CLASS_trans + T_GRAVEL_trans + 
+                                T_BULK_DENSITY_trans + T_CEC_CLAY_trans + T_BS_trans + T_CACO3_trans + 
+                                T_SAND_trans + T_SILT_trans + T_CLAY_trans + T_OC_trans + T_CEC_SOIL_trans +
+                                 T_TEB_trans + T_ESP_trans + T_ECE_trans)+(elv_trans + gti_trans + ndep_trans +                                   co2_trans),keep.order = T),data = df_wood)
+
+NM_wood2 <- lm(terms(log(leafN)~(mat_trans + matgs_trans + tmonthmin_trans + tmonthmax_trans + 
+                                ndaysgs_trans + mai_trans + maigs_trans + map_trans + pmonthmin_trans +
+                                mapgs_trans + mavgs_trans + mav_trans + alpha_trans + vcmax25_trans +
+                                jmax25_trans + gs_accl_trans + aet_trans + ai_trans + cwdx80_trans)+
+                               (pH_trans + TP_trans + PBR_trans +  TOTN_trans + TK_trans + ORGC_trans +                                           CNrt_trans + ALSA_trans + AWC_CLASS_trans + T_GRAVEL_trans + 
+                                T_BULK_DENSITY_trans + T_CEC_CLAY_trans + T_BS_trans + T_CACO3_trans + 
+                                T_SAND_trans + T_SILT_trans + T_CLAY_trans + T_OC_trans + T_CEC_SOIL_trans +
+                                 T_TEB_trans + T_ESP_trans + T_ECE_trans)+(elv_trans + gti_trans + ndep_trans +                                   co2_trans)+ SP,keep.order = T),data = df_wood)
+anova(NM_wood1)
+anova(NM_wood2)
+```
+
+```{r}
+#leaf P
+PM_wood1 <- lm(terms(log(leafP)~SP +(mat_trans + matgs_trans + tmonthmin_trans + tmonthmax_trans + 
+                                ndaysgs_trans + mai_trans + maigs_trans + map_trans + pmonthmin_trans +
+                                mapgs_trans + mavgs_trans + mav_trans + alpha_trans + vcmax25_trans +
+                                jmax25_trans + gs_accl_trans + aet_trans + ai_trans + cwdx80_trans)+
+                               (pH_trans + TP_trans + PBR_trans +  TOTN_trans + TK_trans + ORGC_trans +                                           CNrt_trans + ALSA_trans + AWC_CLASS_trans + T_GRAVEL_trans + 
+                                T_BULK_DENSITY_trans + T_CEC_CLAY_trans + T_BS_trans + T_CACO3_trans + 
+                                T_SAND_trans + T_SILT_trans + T_CLAY_trans + T_OC_trans + T_CEC_SOIL_trans +
+                                 T_TEB_trans + T_ESP_trans + T_ECE_trans)+(elv_trans + gti_trans + ndep_trans +                                   co2_trans),keep.order = T),data = df_wood)
+
+PM_wood2 <- lm(terms(log(leafP)~(mat_trans + matgs_trans + tmonthmin_trans + tmonthmax_trans + 
+                                ndaysgs_trans + mai_trans + maigs_trans + map_trans + pmonthmin_trans +
+                                mapgs_trans + mavgs_trans + mav_trans + alpha_trans + vcmax25_trans +
+                                jmax25_trans + gs_accl_trans + aet_trans + ai_trans + cwdx80_trans)+
+                               (pH_trans + TP_trans + PBR_trans +  TOTN_trans + TK_trans + ORGC_trans +                                           CNrt_trans + ALSA_trans + AWC_CLASS_trans + T_GRAVEL_trans + 
+                                T_BULK_DENSITY_trans + T_CEC_CLAY_trans + T_BS_trans + T_CACO3_trans + 
+                                T_SAND_trans + T_SILT_trans + T_CLAY_trans + T_OC_trans + T_CEC_SOIL_trans +
+                                 T_TEB_trans + T_ESP_trans + T_ECE_trans)+(elv_trans + gti_trans + ndep_trans +                                   co2_trans)+ SP,keep.order = T),data = df_wood)
+anova(PM_wood1)
+anova(PM_wood2)
+```
+
+```{r}
+#leaf N:P
+NPM_wood1 <- lm(terms(log(LeafNP)~SP +(mat_trans + matgs_trans + tmonthmin_trans + tmonthmax_trans + 
+                                ndaysgs_trans + mai_trans + maigs_trans + map_trans + pmonthmin_trans +
+                                mapgs_trans + mavgs_trans + mav_trans + alpha_trans + vcmax25_trans +
+                                jmax25_trans + gs_accl_trans + aet_trans + ai_trans + cwdx80_trans)+
+                               (pH_trans + TP_trans + PBR_trans +  TOTN_trans + TK_trans + ORGC_trans +                                           CNrt_trans + ALSA_trans + AWC_CLASS_trans + T_GRAVEL_trans + 
+                                T_BULK_DENSITY_trans + T_CEC_CLAY_trans + T_BS_trans + T_CACO3_trans + 
+                                T_SAND_trans + T_SILT_trans + T_CLAY_trans + T_OC_trans + T_CEC_SOIL_trans +
+                                 T_TEB_trans + T_ESP_trans + T_ECE_trans)+(elv_trans + gti_trans + ndep_trans +                                   co2_trans),keep.order = T),data = df_wood)
+
+NPM_wood2 <- lm(terms(log(LeafNP)~(mat_trans + matgs_trans + tmonthmin_trans + tmonthmax_trans + 
+                                ndaysgs_trans + mai_trans + maigs_trans + map_trans + pmonthmin_trans +
+                                mapgs_trans + mavgs_trans + mav_trans + alpha_trans + vcmax25_trans +
+                                jmax25_trans + gs_accl_trans + aet_trans + ai_trans + cwdx80_trans)+
+                               (pH_trans + TP_trans + PBR_trans +  TOTN_trans + TK_trans + ORGC_trans +                                           CNrt_trans + ALSA_trans + AWC_CLASS_trans + T_GRAVEL_trans + 
+                                T_BULK_DENSITY_trans + T_CEC_CLAY_trans + T_BS_trans + T_CACO3_trans + 
+                                T_SAND_trans + T_SILT_trans + T_CLAY_trans + T_OC_trans + T_CEC_SOIL_trans +
+                                 T_TEB_trans + T_ESP_trans + T_ECE_trans)+(elv_trans + gti_trans + ndep_trans +                                   co2_trans)+ SP,keep.order = T),data = df_wood)
+anova(NPM_wood1)
+anova(NPM_wood2)
+```
+
+## explaination of SP and environment on tree
+
+```{r}
+#leaf N 
+NM_tree1 <- lm(terms(log(leafN)~SP +(mat_trans + matgs_trans + tmonthmin_trans + tmonthmax_trans + 
+                                ndaysgs_trans + mai_trans + maigs_trans + map_trans + pmonthmin_trans +
+                                mapgs_trans + mavgs_trans + mav_trans + alpha_trans + vcmax25_trans +
+                                jmax25_trans + gs_accl_trans + aet_trans + ai_trans + cwdx80_trans)+
+                               (pH_trans + TP_trans + PBR_trans +  TOTN_trans + TK_trans + ORGC_trans +                                           CNrt_trans + ALSA_trans + AWC_CLASS_trans + T_GRAVEL_trans + 
+                                T_BULK_DENSITY_trans + T_CEC_CLAY_trans + T_BS_trans + T_CACO3_trans + 
+                                T_SAND_trans + T_SILT_trans + T_CLAY_trans + T_OC_trans + T_CEC_SOIL_trans +
+                                 T_TEB_trans + T_ESP_trans + T_ECE_trans)+(elv_trans + gti_trans + ndep_trans +                                   co2_trans),keep.order = T),data = df_tree)
+
+NM_tree2 <- lm(terms(log(leafN)~(mat_trans + matgs_trans + tmonthmin_trans + tmonthmax_trans + 
+                                ndaysgs_trans + mai_trans + maigs_trans + map_trans + pmonthmin_trans +
+                                mapgs_trans + mavgs_trans + mav_trans + alpha_trans + vcmax25_trans +
+                                jmax25_trans + gs_accl_trans + aet_trans + ai_trans + cwdx80_trans)+
+                               (pH_trans + TP_trans + PBR_trans +  TOTN_trans + TK_trans + ORGC_trans +                                           CNrt_trans + ALSA_trans + AWC_CLASS_trans + T_GRAVEL_trans + 
+                                T_BULK_DENSITY_trans + T_CEC_CLAY_trans + T_BS_trans + T_CACO3_trans + 
+                                T_SAND_trans + T_SILT_trans + T_CLAY_trans + T_OC_trans + T_CEC_SOIL_trans +
+                                 T_TEB_trans + T_ESP_trans + T_ECE_trans)+(elv_trans + gti_trans + ndep_trans +                                   co2_trans)+ SP,keep.order = T),data = df_tree)
+anova(NM_tree1)
+anova(NM_tree2)
+```
+
+```{r}
+#leaf P 
+PM_tree1 <- lm(terms(log(leafP)~SP +(mat_trans + matgs_trans + tmonthmin_trans + tmonthmax_trans + 
+                                ndaysgs_trans + mai_trans + maigs_trans + map_trans + pmonthmin_trans +
+                                mapgs_trans + mavgs_trans + mav_trans + alpha_trans + vcmax25_trans +
+                                jmax25_trans + gs_accl_trans + aet_trans + ai_trans + cwdx80_trans)+
+                               (pH_trans + TP_trans + PBR_trans +  TOTN_trans + TK_trans + ORGC_trans +                                           CNrt_trans + ALSA_trans + AWC_CLASS_trans + T_GRAVEL_trans + 
+                                T_BULK_DENSITY_trans + T_CEC_CLAY_trans + T_BS_trans + T_CACO3_trans + 
+                                T_SAND_trans + T_SILT_trans + T_CLAY_trans + T_OC_trans + T_CEC_SOIL_trans +
+                                 T_TEB_trans + T_ESP_trans + T_ECE_trans)+(elv_trans + gti_trans + ndep_trans +                                   co2_trans),keep.order = T),data = df_tree)
+
+PM_tree2 <- lm(terms(log(leafP)~(mat_trans + matgs_trans + tmonthmin_trans + tmonthmax_trans + 
+                                ndaysgs_trans + mai_trans + maigs_trans + map_trans + pmonthmin_trans +
+                                mapgs_trans + mavgs_trans + mav_trans + alpha_trans + vcmax25_trans +
+                                jmax25_trans + gs_accl_trans + aet_trans + ai_trans + cwdx80_trans)+
+                               (pH_trans + TP_trans + PBR_trans +  TOTN_trans + TK_trans + ORGC_trans +                                           CNrt_trans + ALSA_trans + AWC_CLASS_trans + T_GRAVEL_trans + 
+                                T_BULK_DENSITY_trans + T_CEC_CLAY_trans + T_BS_trans + T_CACO3_trans + 
+                                T_SAND_trans + T_SILT_trans + T_CLAY_trans + T_OC_trans + T_CEC_SOIL_trans +
+                                 T_TEB_trans + T_ESP_trans + T_ECE_trans)+(elv_trans + gti_trans + ndep_trans +                                   co2_trans)+ SP,keep.order = T),data = df_tree)
+anova(PM_tree1)
+anova(PM_tree2)
+```
+
+```{r}
+#leaf N:P 
+NPM_tree1 <- lm(terms(log(LeafNP)~SP +(mat_trans + matgs_trans + tmonthmin_trans + tmonthmax_trans + 
+                                ndaysgs_trans + mai_trans + maigs_trans + map_trans + pmonthmin_trans +
+                                mapgs_trans + mavgs_trans + mav_trans + alpha_trans + vcmax25_trans +
+                                jmax25_trans + gs_accl_trans + aet_trans + ai_trans + cwdx80_trans)+
+                               (pH_trans + TP_trans + PBR_trans +  TOTN_trans + TK_trans + ORGC_trans +                                           CNrt_trans + ALSA_trans + AWC_CLASS_trans + T_GRAVEL_trans + 
+                                T_BULK_DENSITY_trans + T_CEC_CLAY_trans + T_BS_trans + T_CACO3_trans + 
+                                T_SAND_trans + T_SILT_trans + T_CLAY_trans + T_OC_trans + T_CEC_SOIL_trans +
+                                 T_TEB_trans + T_ESP_trans + T_ECE_trans)+(elv_trans + gti_trans + ndep_trans +                                   co2_trans),keep.order = T),data = df_tree)
+
+NPM_tree2 <- lm(terms(log(LeafNP)~(mat_trans + matgs_trans + tmonthmin_trans + tmonthmax_trans + 
+                                ndaysgs_trans + mai_trans + maigs_trans + map_trans + pmonthmin_trans +
+                                mapgs_trans + mavgs_trans + mav_trans + alpha_trans + vcmax25_trans +
+                                jmax25_trans + gs_accl_trans + aet_trans + ai_trans + cwdx80_trans)+
+                               (pH_trans + TP_trans + PBR_trans +  TOTN_trans + TK_trans + ORGC_trans +                                           CNrt_trans + ALSA_trans + AWC_CLASS_trans + T_GRAVEL_trans + 
+                                T_BULK_DENSITY_trans + T_CEC_CLAY_trans + T_BS_trans + T_CACO3_trans + 
+                                T_SAND_trans + T_SILT_trans + T_CLAY_trans + T_OC_trans + T_CEC_SOIL_trans +
+                                 T_TEB_trans + T_ESP_trans + T_ECE_trans)+(elv_trans + gti_trans + ndep_trans +                                   co2_trans)+ SP,keep.order = T),data = df_tree)
+anova(NPM_tree1)
+anova(NPM_tree2)
+```
+
+## explaination of SP and environment on conifers
+
+```{r}
+#leaf N 
+NM_Conifer1 <- lm(terms(log(leafN)~SP +(mat_trans + matgs_trans + tmonthmin_trans + tmonthmax_trans + 
+                                ndaysgs_trans + mai_trans + maigs_trans + map_trans + pmonthmin_trans +
+                                mapgs_trans + mavgs_trans + mav_trans + alpha_trans + vcmax25_trans +
+                                jmax25_trans + gs_accl_trans + aet_trans + ai_trans + cwdx80_trans)+
+                               (pH_trans + TP_trans + PBR_trans +  TOTN_trans + TK_trans + ORGC_trans +                                           CNrt_trans + ALSA_trans + AWC_CLASS_trans + T_GRAVEL_trans + 
+                                T_BULK_DENSITY_trans + T_CEC_CLAY_trans + T_BS_trans + T_CACO3_trans + 
+                                T_SAND_trans + T_SILT_trans + T_CLAY_trans + T_OC_trans + T_CEC_SOIL_trans +
+                                 T_TEB_trans + T_ESP_trans + T_ECE_trans)+(elv_trans + gti_trans + ndep_trans +                                   co2_trans),keep.order = T),data = df_Conifer)
+
+NM_Conifer2 <- lm(terms(log(leafN)~(mat_trans + matgs_trans + tmonthmin_trans + tmonthmax_trans + 
+                                ndaysgs_trans + mai_trans + maigs_trans + map_trans + pmonthmin_trans +
+                                mapgs_trans + mavgs_trans + mav_trans + alpha_trans + vcmax25_trans +
+                                jmax25_trans + gs_accl_trans + aet_trans + ai_trans + cwdx80_trans)+
+                               (pH_trans + TP_trans + PBR_trans +  TOTN_trans + TK_trans + ORGC_trans +                                           CNrt_trans + ALSA_trans + AWC_CLASS_trans + T_GRAVEL_trans + 
+                                T_BULK_DENSITY_trans + T_CEC_CLAY_trans + T_BS_trans + T_CACO3_trans + 
+                                T_SAND_trans + T_SILT_trans + T_CLAY_trans + T_OC_trans + T_CEC_SOIL_trans +
+                                 T_TEB_trans + T_ESP_trans + T_ECE_trans)+(elv_trans + gti_trans + ndep_trans +                                   co2_trans)+ SP,keep.order = T),data = df_Conifer)
+anova(NM_Conifer1)
+anova(NM_Conifer2)
+```
+
+```{r}
+#leaf P 
+PM_Conifer1 <- lm(terms(log(leafP)~SP +(mat_trans + matgs_trans + tmonthmin_trans + tmonthmax_trans + 
+                                ndaysgs_trans + mai_trans + maigs_trans + map_trans + pmonthmin_trans +
+                                mapgs_trans + mavgs_trans + mav_trans + alpha_trans + vcmax25_trans +
+                                jmax25_trans + gs_accl_trans + aet_trans + ai_trans + cwdx80_trans)+
+                               (pH_trans + TP_trans + PBR_trans +  TOTN_trans + TK_trans + ORGC_trans +                                           CNrt_trans + ALSA_trans + AWC_CLASS_trans + T_GRAVEL_trans + 
+                                T_BULK_DENSITY_trans + T_CEC_CLAY_trans + T_BS_trans + T_CACO3_trans + 
+                                T_SAND_trans + T_SILT_trans + T_CLAY_trans + T_OC_trans + T_CEC_SOIL_trans +
+                                 T_TEB_trans + T_ESP_trans + T_ECE_trans)+(elv_trans + gti_trans + ndep_trans +                                   co2_trans),keep.order = T),data = df_Conifer)
+
+PM_Conifer2 <- lm(terms(log(leafP)~(mat_trans + matgs_trans + tmonthmin_trans + tmonthmax_trans + 
+                                ndaysgs_trans + mai_trans + maigs_trans + map_trans + pmonthmin_trans +
+                                mapgs_trans + mavgs_trans + mav_trans + alpha_trans + vcmax25_trans +
+                                jmax25_trans + gs_accl_trans + aet_trans + ai_trans + cwdx80_trans)+
+                               (pH_trans + TP_trans + PBR_trans +  TOTN_trans + TK_trans + ORGC_trans +                                           CNrt_trans + ALSA_trans + AWC_CLASS_trans + T_GRAVEL_trans + 
+                                T_BULK_DENSITY_trans + T_CEC_CLAY_trans + T_BS_trans + T_CACO3_trans + 
+                                T_SAND_trans + T_SILT_trans + T_CLAY_trans + T_OC_trans + T_CEC_SOIL_trans +
+                                 T_TEB_trans + T_ESP_trans + T_ECE_trans)+(elv_trans + gti_trans + ndep_trans +                                   co2_trans)+ SP,keep.order = T),data = df_Conifer)
+anova(PM_Conifer1)
+anova(PM_Conifer2)
+```
+
+```{r}
+#leaf N:P 
+NPM_Conifer1 <- lm(terms(log(LeafNP)~SP +(mat_trans + matgs_trans + tmonthmin_trans + tmonthmax_trans + 
+                                ndaysgs_trans + mai_trans + maigs_trans + map_trans + pmonthmin_trans +
+                                mapgs_trans + mavgs_trans + mav_trans + alpha_trans + vcmax25_trans +
+                                jmax25_trans + gs_accl_trans + aet_trans + ai_trans + cwdx80_trans)+
+                               (pH_trans + TP_trans + PBR_trans +  TOTN_trans + TK_trans + ORGC_trans +                                           CNrt_trans + ALSA_trans + AWC_CLASS_trans + T_GRAVEL_trans + 
+                                T_BULK_DENSITY_trans + T_CEC_CLAY_trans + T_BS_trans + T_CACO3_trans + 
+                                T_SAND_trans + T_SILT_trans + T_CLAY_trans + T_OC_trans + T_CEC_SOIL_trans +
+                                 T_TEB_trans + T_ESP_trans + T_ECE_trans)+(elv_trans + gti_trans + ndep_trans +                                   co2_trans),keep.order = T),data = df_Conifer)
+
+NPM_Conifer2 <- lm(terms(log(LeafNP)~(mat_trans + matgs_trans + tmonthmin_trans + tmonthmax_trans + 
+                                ndaysgs_trans + mai_trans + maigs_trans + map_trans + pmonthmin_trans +
+                                mapgs_trans + mavgs_trans + mav_trans + alpha_trans + vcmax25_trans +
+                                jmax25_trans + gs_accl_trans + aet_trans + ai_trans + cwdx80_trans)+
+                               (pH_trans + TP_trans + PBR_trans +  TOTN_trans + TK_trans + ORGC_trans +                                           CNrt_trans + ALSA_trans + AWC_CLASS_trans + T_GRAVEL_trans + 
+                                T_BULK_DENSITY_trans + T_CEC_CLAY_trans + T_BS_trans + T_CACO3_trans + 
+                                T_SAND_trans + T_SILT_trans + T_CLAY_trans + T_OC_trans + T_CEC_SOIL_trans +
+                                 T_TEB_trans + T_ESP_trans + T_ECE_trans)+(elv_trans + gti_trans + ndep_trans +                                   co2_trans)+ SP,keep.order = T),data = df_Conifer)
+anova(NPM_Conifer1)
+anova(NPM_Conifer2)
+```
+
+## explaination of SP and environment on evergreen broadleaf trees
+```{r}
+#leaf N 
+NM_Eb1 <- lm(terms(log(leafN)~SP +(mat_trans + matgs_trans + tmonthmin_trans + tmonthmax_trans + 
+                                ndaysgs_trans + mai_trans + maigs_trans + map_trans + pmonthmin_trans +
+                                mapgs_trans + mavgs_trans + mav_trans + alpha_trans + vcmax25_trans +
+                                jmax25_trans + gs_accl_trans + aet_trans + ai_trans + cwdx80_trans)+
+                               (pH_trans + TP_trans + PBR_trans +  TOTN_trans + TK_trans + ORGC_trans +                                           CNrt_trans + ALSA_trans + AWC_CLASS_trans + T_GRAVEL_trans + 
+                                T_BULK_DENSITY_trans + T_CEC_CLAY_trans + T_BS_trans + T_CACO3_trans + 
+                                T_SAND_trans + T_SILT_trans + T_CLAY_trans + T_OC_trans + T_CEC_SOIL_trans +
+                                 T_TEB_trans + T_ESP_trans + T_ECE_trans)+(elv_trans + gti_trans + ndep_trans +                                   co2_trans),keep.order = T),data = df_Eb)
+
+NM_Eb2 <- lm(terms(log(leafN)~(mat_trans + matgs_trans + tmonthmin_trans + tmonthmax_trans + 
+                                ndaysgs_trans + mai_trans + maigs_trans + map_trans + pmonthmin_trans +
+                                mapgs_trans + mavgs_trans + mav_trans + alpha_trans + vcmax25_trans +
+                                jmax25_trans + gs_accl_trans + aet_trans + ai_trans + cwdx80_trans)+
+                               (pH_trans + TP_trans + PBR_trans +  TOTN_trans + TK_trans + ORGC_trans +                                           CNrt_trans + ALSA_trans + AWC_CLASS_trans + T_GRAVEL_trans + 
+                                T_BULK_DENSITY_trans + T_CEC_CLAY_trans + T_BS_trans + T_CACO3_trans + 
+                                T_SAND_trans + T_SILT_trans + T_CLAY_trans + T_OC_trans + T_CEC_SOIL_trans +
+                                 T_TEB_trans + T_ESP_trans + T_ECE_trans)+(elv_trans + gti_trans + ndep_trans +                                   co2_trans)+ SP,keep.order = T),data = df_Eb)
+anova(NM_Eb1)
+anova(NM_Eb2)
+```
+
+```{r}
+#leaf P 
+PM_Eb1 <- lm(terms(log(leafP)~SP +(mat_trans + matgs_trans + tmonthmin_trans + tmonthmax_trans + 
+                                ndaysgs_trans + mai_trans + maigs_trans + map_trans + pmonthmin_trans +
+                                mapgs_trans + mavgs_trans + mav_trans + alpha_trans + vcmax25_trans +
+                                jmax25_trans + gs_accl_trans + aet_trans + ai_trans + cwdx80_trans)+
+                               (pH_trans + TP_trans + PBR_trans +  TOTN_trans + TK_trans + ORGC_trans +                                           CNrt_trans + ALSA_trans + AWC_CLASS_trans + T_GRAVEL_trans + 
+                                T_BULK_DENSITY_trans + T_CEC_CLAY_trans + T_BS_trans + T_CACO3_trans + 
+                                T_SAND_trans + T_SILT_trans + T_CLAY_trans + T_OC_trans + T_CEC_SOIL_trans +
+                                 T_TEB_trans + T_ESP_trans + T_ECE_trans)+(elv_trans + gti_trans + ndep_trans +                                   co2_trans),keep.order = T),data = df_Eb)
+
+PM_Eb2 <- lm(terms(log(leafP)~(mat_trans + matgs_trans + tmonthmin_trans + tmonthmax_trans + 
+                                ndaysgs_trans + mai_trans + maigs_trans + map_trans + pmonthmin_trans +
+                                mapgs_trans + mavgs_trans + mav_trans + alpha_trans + vcmax25_trans +
+                                jmax25_trans + gs_accl_trans + aet_trans + ai_trans + cwdx80_trans)+
+                               (pH_trans + TP_trans + PBR_trans +  TOTN_trans + TK_trans + ORGC_trans +                                           CNrt_trans + ALSA_trans + AWC_CLASS_trans + T_GRAVEL_trans + 
+                                T_BULK_DENSITY_trans + T_CEC_CLAY_trans + T_BS_trans + T_CACO3_trans + 
+                                T_SAND_trans + T_SILT_trans + T_CLAY_trans + T_OC_trans + T_CEC_SOIL_trans +
+                                 T_TEB_trans + T_ESP_trans + T_ECE_trans)+(elv_trans + gti_trans + ndep_trans +                                   co2_trans)+ SP,keep.order = T),data = df_Eb)
+anova(PM_Eb1)
+anova(PM_Eb2)
+```
+
+```{r}
+#leaf N:P 
+NPM_Eb1 <- lm(terms(log(LeafNP)~SP +(mat_trans + matgs_trans + tmonthmin_trans + tmonthmax_trans + 
+                                ndaysgs_trans + mai_trans + maigs_trans + map_trans + pmonthmin_trans +
+                                mapgs_trans + mavgs_trans + mav_trans + alpha_trans + vcmax25_trans +
+                                jmax25_trans + gs_accl_trans + aet_trans + ai_trans + cwdx80_trans)+
+                               (pH_trans + TP_trans + PBR_trans +  TOTN_trans + TK_trans + ORGC_trans +                                           CNrt_trans + ALSA_trans + AWC_CLASS_trans + T_GRAVEL_trans + 
+                                T_BULK_DENSITY_trans + T_CEC_CLAY_trans + T_BS_trans + T_CACO3_trans + 
+                                T_SAND_trans + T_SILT_trans + T_CLAY_trans + T_OC_trans + T_CEC_SOIL_trans +
+                                 T_TEB_trans + T_ESP_trans + T_ECE_trans)+(elv_trans + gti_trans + ndep_trans +                                   co2_trans),keep.order = T),data = df_Eb)
+
+NPM_Eb2 <- lm(terms(log(LeafNP)~(mat_trans + matgs_trans + tmonthmin_trans + tmonthmax_trans + 
+                                ndaysgs_trans + mai_trans + maigs_trans + map_trans + pmonthmin_trans +
+                                mapgs_trans + mavgs_trans + mav_trans + alpha_trans + vcmax25_trans +
+                                jmax25_trans + gs_accl_trans + aet_trans + ai_trans + cwdx80_trans)+
+                               (pH_trans + TP_trans + PBR_trans +  TOTN_trans + TK_trans + ORGC_trans +                                           CNrt_trans + ALSA_trans + AWC_CLASS_trans + T_GRAVEL_trans + 
+                                T_BULK_DENSITY_trans + T_CEC_CLAY_trans + T_BS_trans + T_CACO3_trans + 
+                                T_SAND_trans + T_SILT_trans + T_CLAY_trans + T_OC_trans + T_CEC_SOIL_trans +
+                                 T_TEB_trans + T_ESP_trans + T_ECE_trans)+(elv_trans + gti_trans + ndep_trans +                                   co2_trans)+ SP,keep.order = T),data = df_Eb)
+anova(NPM_Eb1)
+anova(NPM_Eb2)
+```
+
+## explaination of SP and environment on deciduous broadleaf trees
+```{r}
+#leaf N 
+NM_Deci1 <- lm(terms(log(leafN)~SP +(mat_trans + matgs_trans + tmonthmin_trans + tmonthmax_trans + 
+                                ndaysgs_trans + mai_trans + maigs_trans + map_trans + pmonthmin_trans +
+                                mapgs_trans + mavgs_trans + mav_trans + alpha_trans + vcmax25_trans +
+                                jmax25_trans + gs_accl_trans + aet_trans + ai_trans + cwdx80_trans)+
+                               (pH_trans + TP_trans + PBR_trans +  TOTN_trans + TK_trans + ORGC_trans +                                           CNrt_trans + ALSA_trans + AWC_CLASS_trans + T_GRAVEL_trans + 
+                                T_BULK_DENSITY_trans + T_CEC_CLAY_trans + T_BS_trans + T_CACO3_trans + 
+                                T_SAND_trans + T_SILT_trans + T_CLAY_trans + T_OC_trans + T_CEC_SOIL_trans +
+                                 T_TEB_trans + T_ESP_trans + T_ECE_trans)+(elv_trans + gti_trans + ndep_trans +                                   co2_trans),keep.order = T),data = df_Deci)
+
+NM_Deci2 <- lm(terms(log(leafN)~(mat_trans + matgs_trans + tmonthmin_trans + tmonthmax_trans + 
+                                ndaysgs_trans + mai_trans + maigs_trans + map_trans + pmonthmin_trans +
+                                mapgs_trans + mavgs_trans + mav_trans + alpha_trans + vcmax25_trans +
+                                jmax25_trans + gs_accl_trans + aet_trans + ai_trans + cwdx80_trans)+
+                               (pH_trans + TP_trans + PBR_trans +  TOTN_trans + TK_trans + ORGC_trans +                                           CNrt_trans + ALSA_trans + AWC_CLASS_trans + T_GRAVEL_trans + 
+                                T_BULK_DENSITY_trans + T_CEC_CLAY_trans + T_BS_trans + T_CACO3_trans + 
+                                T_SAND_trans + T_SILT_trans + T_CLAY_trans + T_OC_trans + T_CEC_SOIL_trans +
+                                 T_TEB_trans + T_ESP_trans + T_ECE_trans)+(elv_trans + gti_trans + ndep_trans +                                   co2_trans)+ SP,keep.order = T),data = df_Deci)
+anova(NM_Deci1)
+anova(NM_Deci2)
+```
+
+```{r}
+#leaf P 
+PM_Deci1 <- lm(terms(log(leafP)~SP +(mat_trans + matgs_trans + tmonthmin_trans + tmonthmax_trans + 
+                                ndaysgs_trans + mai_trans + maigs_trans + map_trans + pmonthmin_trans +
+                                mapgs_trans + mavgs_trans + mav_trans + alpha_trans + vcmax25_trans +
+                                jmax25_trans + gs_accl_trans + aet_trans + ai_trans + cwdx80_trans)+
+                               (pH_trans + TP_trans + PBR_trans +  TOTN_trans + TK_trans + ORGC_trans +                                           CNrt_trans + ALSA_trans + AWC_CLASS_trans + T_GRAVEL_trans + 
+                                T_BULK_DENSITY_trans + T_CEC_CLAY_trans + T_BS_trans + T_CACO3_trans + 
+                                T_SAND_trans + T_SILT_trans + T_CLAY_trans + T_OC_trans + T_CEC_SOIL_trans +
+                                 T_TEB_trans + T_ESP_trans + T_ECE_trans)+(elv_trans + gti_trans + ndep_trans +                                   co2_trans),keep.order = T),data = df_Deci)
+
+PM_Deci2 <- lm(terms(log(leafP)~(mat_trans + matgs_trans + tmonthmin_trans + tmonthmax_trans + 
+                                ndaysgs_trans + mai_trans + maigs_trans + map_trans + pmonthmin_trans +
+                                mapgs_trans + mavgs_trans + mav_trans + alpha_trans + vcmax25_trans +
+                                jmax25_trans + gs_accl_trans + aet_trans + ai_trans + cwdx80_trans)+
+                               (pH_trans + TP_trans + PBR_trans +  TOTN_trans + TK_trans + ORGC_trans +                                           CNrt_trans + ALSA_trans + AWC_CLASS_trans + T_GRAVEL_trans + 
+                                T_BULK_DENSITY_trans + T_CEC_CLAY_trans + T_BS_trans + T_CACO3_trans + 
+                                T_SAND_trans + T_SILT_trans + T_CLAY_trans + T_OC_trans + T_CEC_SOIL_trans +
+                                 T_TEB_trans + T_ESP_trans + T_ECE_trans)+(elv_trans + gti_trans + ndep_trans +                                   co2_trans)+ SP,keep.order = T),data = df_Deci)
+anova(PM_Deci1)
+anova(PM_Deci2)
+```
+
+```{r}
+#leaf N:P 
+NPM_Deci1 <- lm(terms(log(LeafNP)~SP +(mat_trans + matgs_trans + tmonthmin_trans + tmonthmax_trans + 
+                                ndaysgs_trans + mai_trans + maigs_trans + map_trans + pmonthmin_trans +
+                                mapgs_trans + mavgs_trans + mav_trans + alpha_trans + vcmax25_trans +
+                                jmax25_trans + gs_accl_trans + aet_trans + ai_trans + cwdx80_trans)+
+                               (pH_trans + TP_trans + PBR_trans +  TOTN_trans + TK_trans + ORGC_trans +                                           CNrt_trans + ALSA_trans + AWC_CLASS_trans + T_GRAVEL_trans + 
+                                T_BULK_DENSITY_trans + T_CEC_CLAY_trans + T_BS_trans + T_CACO3_trans + 
+                                T_SAND_trans + T_SILT_trans + T_CLAY_trans + T_OC_trans + T_CEC_SOIL_trans +
+                                 T_TEB_trans + T_ESP_trans + T_ECE_trans)+(elv_trans + gti_trans + ndep_trans +                                   co2_trans),keep.order = T),data = df_Deci)
+
+NPM_Deci2 <- lm(terms(log(LeafNP)~(mat_trans + matgs_trans + tmonthmin_trans + tmonthmax_trans + 
+                                ndaysgs_trans + mai_trans + maigs_trans + map_trans + pmonthmin_trans +
+                                mapgs_trans + mavgs_trans + mav_trans + alpha_trans + vcmax25_trans +
+                                jmax25_trans + gs_accl_trans + aet_trans + ai_trans + cwdx80_trans)+
+                               (pH_trans + TP_trans + PBR_trans +  TOTN_trans + TK_trans + ORGC_trans +                                           CNrt_trans + ALSA_trans + AWC_CLASS_trans + T_GRAVEL_trans + 
+                                T_BULK_DENSITY_trans + T_CEC_CLAY_trans + T_BS_trans + T_CACO3_trans + 
+                                T_SAND_trans + T_SILT_trans + T_CLAY_trans + T_OC_trans + T_CEC_SOIL_trans +
+                                 T_TEB_trans + T_ESP_trans + T_ECE_trans)+(elv_trans + gti_trans + ndep_trans +                                   co2_trans)+ SP,keep.order = T),data = df_Deci)
+anova(NPM_Deci1)
+anova(NPM_Deci2)
+```
+
+## explaination of SP and environment on grasses
+
+```{r}
+#leaf N 
+NM_grass1 <- lm(terms(log(leafN)~SP +(mat_trans + matgs_trans + tmonthmin_trans + tmonthmax_trans + 
+                                ndaysgs_trans + mai_trans + maigs_trans + map_trans + pmonthmin_trans +
+                                mapgs_trans + mavgs_trans + mav_trans + alpha_trans + vcmax25_trans +
+                                jmax25_trans + gs_accl_trans + aet_trans + ai_trans + cwdx80_trans)+
+                               (pH_trans + TP_trans + PBR_trans +  TOTN_trans + TK_trans + ORGC_trans +                                           CNrt_trans + ALSA_trans + AWC_CLASS_trans + T_GRAVEL_trans + 
+                                T_BULK_DENSITY_trans + T_CEC_CLAY_trans + T_BS_trans + T_CACO3_trans + 
+                                T_SAND_trans + T_SILT_trans + T_CLAY_trans + T_OC_trans + T_CEC_SOIL_trans +
+                                 T_TEB_trans + T_ESP_trans + T_ECE_trans)+(elv_trans + gti_trans + ndep_trans +                                   co2_trans),keep.order = T),data = df_grass)
+
+NM_grass2 <- lm(terms(log(leafN)~(mat_trans + matgs_trans + tmonthmin_trans + tmonthmax_trans + 
+                                ndaysgs_trans + mai_trans + maigs_trans + map_trans + pmonthmin_trans +
+                                mapgs_trans + mavgs_trans + mav_trans + alpha_trans + vcmax25_trans +
+                                jmax25_trans + gs_accl_trans + aet_trans + ai_trans + cwdx80_trans)+
+                               (pH_trans + TP_trans + PBR_trans +  TOTN_trans + TK_trans + ORGC_trans +                                           CNrt_trans + ALSA_trans + AWC_CLASS_trans + T_GRAVEL_trans + 
+                                T_BULK_DENSITY_trans + T_CEC_CLAY_trans + T_BS_trans + T_CACO3_trans + 
+                                T_SAND_trans + T_SILT_trans + T_CLAY_trans + T_OC_trans + T_CEC_SOIL_trans +
+                                 T_TEB_trans + T_ESP_trans + T_ECE_trans)+(elv_trans + gti_trans + ndep_trans +                                   co2_trans)+ SP,keep.order = T),data = df_grass)
+anova(NM_grass1)
+anova(NM_grass2)
+```
+
+```{r}
+#leaf P 
+PM_grass1 <- lm(terms(log(leafP)~SP +(mat_trans + matgs_trans + tmonthmin_trans + tmonthmax_trans + 
+                                ndaysgs_trans + mai_trans + maigs_trans + map_trans + pmonthmin_trans +
+                                mapgs_trans + mavgs_trans + mav_trans + alpha_trans + vcmax25_trans +
+                                jmax25_trans + gs_accl_trans + aet_trans + ai_trans + cwdx80_trans)+
+                               (pH_trans + TP_trans + PBR_trans +  TOTN_trans + TK_trans + ORGC_trans +                                           CNrt_trans + ALSA_trans + AWC_CLASS_trans + T_GRAVEL_trans + 
+                                T_BULK_DENSITY_trans + T_CEC_CLAY_trans + T_BS_trans + T_CACO3_trans + 
+                                T_SAND_trans + T_SILT_trans + T_CLAY_trans + T_OC_trans + T_CEC_SOIL_trans +
+                                 T_TEB_trans + T_ESP_trans + T_ECE_trans)+(elv_trans + gti_trans + ndep_trans +                                   co2_trans),keep.order = T),data = df_grass)
+
+PM_grass2 <- lm(terms(log(leafP)~(mat_trans + matgs_trans + tmonthmin_trans + tmonthmax_trans + 
+                                ndaysgs_trans + mai_trans + maigs_trans + map_trans + pmonthmin_trans +
+                                mapgs_trans + mavgs_trans + mav_trans + alpha_trans + vcmax25_trans +
+                                jmax25_trans + gs_accl_trans + aet_trans + ai_trans + cwdx80_trans)+
+                               (pH_trans + TP_trans + PBR_trans +  TOTN_trans + TK_trans + ORGC_trans +                                           CNrt_trans + ALSA_trans + AWC_CLASS_trans + T_GRAVEL_trans + 
+                                T_BULK_DENSITY_trans + T_CEC_CLAY_trans + T_BS_trans + T_CACO3_trans + 
+                                T_SAND_trans + T_SILT_trans + T_CLAY_trans + T_OC_trans + T_CEC_SOIL_trans +
+                                 T_TEB_trans + T_ESP_trans + T_ECE_trans)+(elv_trans + gti_trans + ndep_trans +                                   co2_trans)+ SP,keep.order = T),data = df_grass)
+anova(PM_grass1)
+anova(PM_grass2)
+```
+
+```{r}
+#leaf N:P 
+NPM_grass1 <- lm(terms(log(LeafNP)~SP +(mat_trans + matgs_trans + tmonthmin_trans + tmonthmax_trans + 
+                                ndaysgs_trans + mai_trans + maigs_trans + map_trans + pmonthmin_trans +
+                                mapgs_trans + mavgs_trans + mav_trans + alpha_trans + vcmax25_trans +
+                                jmax25_trans + gs_accl_trans + aet_trans + ai_trans + cwdx80_trans)+
+                               (pH_trans + TP_trans + PBR_trans +  TOTN_trans + TK_trans + ORGC_trans +                                           CNrt_trans + ALSA_trans + AWC_CLASS_trans + T_GRAVEL_trans + 
+                                T_BULK_DENSITY_trans + T_CEC_CLAY_trans + T_BS_trans + T_CACO3_trans + 
+                                T_SAND_trans + T_SILT_trans + T_CLAY_trans + T_OC_trans + T_CEC_SOIL_trans +
+                                 T_TEB_trans + T_ESP_trans + T_ECE_trans)+(elv_trans + gti_trans + ndep_trans +                                   co2_trans),keep.order = T),data = df_grass)
+
+NPM_grass2 <- lm(terms(log(LeafNP)~(mat_trans + matgs_trans + tmonthmin_trans + tmonthmax_trans + 
+                                ndaysgs_trans + mai_trans + maigs_trans + map_trans + pmonthmin_trans +
+                                mapgs_trans + mavgs_trans + mav_trans + alpha_trans + vcmax25_trans +
+                                jmax25_trans + gs_accl_trans + aet_trans + ai_trans + cwdx80_trans)+
+                               (pH_trans + TP_trans + PBR_trans +  TOTN_trans + TK_trans + ORGC_trans +                                           CNrt_trans + ALSA_trans + AWC_CLASS_trans + T_GRAVEL_trans + 
+                                T_BULK_DENSITY_trans + T_CEC_CLAY_trans + T_BS_trans + T_CACO3_trans + 
+                                T_SAND_trans + T_SILT_trans + T_CLAY_trans + T_OC_trans + T_CEC_SOIL_trans +
+                                 T_TEB_trans + T_ESP_trans + T_ECE_trans)+(elv_trans + gti_trans + ndep_trans +                                   co2_trans)+ SP,keep.order = T),data = df_grass)
+anova(NPM_grass1)
+anova(NPM_grass2)
+```
+
+#taxonomy and environment share explanation based on individuals via LME
+
+```{r}
+#whole data
+NM1 <-lme(log(leafN) ~ (mat_trans + matgs_trans + tmonthmin_trans + tmonthmax_trans + ndaysgs_trans +
+                        mai_trans + maigs_trans + map_trans + pmonthmin_trans + mapgs_trans +
+                        mavgs_trans + mav_trans + alpha_trans + vcmax25_trans + jmax25_trans +
+                        gs_accl_trans + aet_trans + ai_trans + cwdx80_trans)+(pH_trans + 
+                        TP_trans + PBR_trans +  TOTN_trans + TK_trans + 
+                        ORGC_trans + CNrt_trans + ALSA_trans + AWC_CLASS_trans + T_GRAVEL_trans+
+                        T_BULK_DENSITY_trans + T_CEC_CLAY_trans + T_BS_trans + T_CACO3_trans +
+                        T_SAND_trans + T_SILT_trans + T_CLAY_trans + T_OC_trans + T_CEC_SOIL_trans +
+                        T_TEB_trans + T_ESP_trans + T_ECE_trans)+(elv_trans + gti_trans + ndep_trans +           
+                        co2_trans), random=~1|SP, data = dat2 )
+
+NM2 <-lme(log(leafP) ~ (mat_trans + matgs_trans + tmonthmin_trans + tmonthmax_trans + ndaysgs_trans +
+                        mai_trans + maigs_trans + map_trans + pmonthmin_trans + mapgs_trans +
+                        mavgs_trans + mav_trans + alpha_trans + vcmax25_trans + jmax25_trans +
+                        gs_accl_trans + aet_trans + ai_trans + cwdx80_trans)+(pH_trans + 
+                        TP_trans + PBR_trans +  TOTN_trans + TK_trans + 
+                        ORGC_trans + CNrt_trans + ALSA_trans + AWC_CLASS_trans + T_GRAVEL_trans+
+                        T_BULK_DENSITY_trans + T_CEC_CLAY_trans + T_BS_trans + T_CACO3_trans +
+                        T_SAND_trans + T_SILT_trans + T_CLAY_trans + T_OC_trans + T_CEC_SOIL_trans +
+                        T_TEB_trans + T_ESP_trans + T_ECE_trans)+(elv_trans + gti_trans + ndep_trans +           
+                        co2_trans), random=~1|SP, data = dat2)
+
+NM3 <-lme(log(LeafNP) ~ (mat_trans + matgs_trans + tmonthmin_trans + tmonthmax_trans + ndaysgs_trans +
+                        mai_trans + maigs_trans + map_trans + pmonthmin_trans + mapgs_trans +
+                        mavgs_trans + mav_trans + alpha_trans + vcmax25_trans + jmax25_trans +
+                        gs_accl_trans + aet_trans + ai_trans + cwdx80_trans)+(pH_trans + 
+                        TP_trans + PBR_trans +  TOTN_trans + TK_trans + 
+                        ORGC_trans + CNrt_trans + ALSA_trans + AWC_CLASS_trans + T_GRAVEL_trans+
+                        T_BULK_DENSITY_trans + T_CEC_CLAY_trans + T_BS_trans + T_CACO3_trans +
+                        T_SAND_trans + T_SILT_trans + T_CLAY_trans + T_OC_trans + T_CEC_SOIL_trans +
+                        T_TEB_trans + T_ESP_trans + T_ECE_trans)+(elv_trans + gti_trans + ndep_trans +           
+                        co2_trans), random=~1|SP, data = dat2)
+
+summary(NM1)
+hist(resid(NM1))
+#install.packages("MuMIn")
+library(MuMIn)#This is the same as Sardan's 2020
+r.squaredGLMM(NM1)
+r.squaredGLMM(NM2)
+r.squaredGLMM(NM3)
+#install.packages("performance")
+library(performance)#This is new released July 21 2021 with many indicators
+model_performance(NM1, metrics = "common", verbose = TRUE)
+model_performance(NM2, metrics = "common", verbose = TRUE)
+model_performance(NM3, metrics = "common", verbose = TRUE)
+```
+
+```{r}
+#woody species
+NM_wood1 <-lme(log(leafN) ~ (mat_trans + matgs_trans + tmonthmin_trans + tmonthmax_trans + ndaysgs_trans +
+                        mai_trans + maigs_trans + map_trans + pmonthmin_trans + mapgs_trans +
+                        mavgs_trans + mav_trans + alpha_trans + vcmax25_trans + jmax25_trans +
+                        gs_accl_trans + aet_trans + ai_trans + cwdx80_trans)+(pH_trans + 
+                        TP_trans + PBR_trans +  TOTN_trans + TK_trans + 
+                        ORGC_trans + CNrt_trans + ALSA_trans + AWC_CLASS_trans + T_GRAVEL_trans+
+                        T_BULK_DENSITY_trans + T_CEC_CLAY_trans + T_BS_trans + T_CACO3_trans +
+                        T_SAND_trans + T_SILT_trans + T_CLAY_trans + T_OC_trans + T_CEC_SOIL_trans +
+                        T_TEB_trans + T_ESP_trans + T_ECE_trans)+(elv_trans + gti_trans + ndep_trans +           
+                        co2_trans), random=~1|SP, data = df_wood2)
+
+NM_wood2 <-lme(log(leafP) ~ (mat_trans + matgs_trans + tmonthmin_trans + tmonthmax_trans + ndaysgs_trans +
+                        mai_trans + maigs_trans + map_trans + pmonthmin_trans + mapgs_trans +
+                        mavgs_trans + mav_trans + alpha_trans + vcmax25_trans + jmax25_trans +
+                        gs_accl_trans + aet_trans + ai_trans + cwdx80_trans)+(pH_trans + 
+                        TP_trans + PBR_trans +  TOTN_trans + TK_trans + 
+                        ORGC_trans + CNrt_trans + ALSA_trans + AWC_CLASS_trans + T_GRAVEL_trans+
+                        T_BULK_DENSITY_trans + T_CEC_CLAY_trans + T_BS_trans + T_CACO3_trans +
+                        T_SAND_trans + T_SILT_trans + T_CLAY_trans + T_OC_trans + T_CEC_SOIL_trans +
+                        T_TEB_trans + T_ESP_trans + T_ECE_trans)+(elv_trans + gti_trans + ndep_trans +           
+                        co2_trans), random=~1|SP, data = df_wood2)
+
+NM_wood3 <-lme(log(LeafNP) ~ (mat_trans + matgs_trans + tmonthmin_trans + tmonthmax_trans + ndaysgs_trans +
+                        mai_trans + maigs_trans + map_trans + pmonthmin_trans + mapgs_trans +
+                        mavgs_trans + mav_trans + alpha_trans + vcmax25_trans + jmax25_trans +
+                        gs_accl_trans + aet_trans + ai_trans + cwdx80_trans)+(pH_trans + 
+                        TP_trans + PBR_trans +  TOTN_trans + TK_trans + 
+                        ORGC_trans + CNrt_trans + ALSA_trans + AWC_CLASS_trans + T_GRAVEL_trans+
+                        T_BULK_DENSITY_trans + T_CEC_CLAY_trans + T_BS_trans + T_CACO3_trans +
+                        T_SAND_trans + T_SILT_trans + T_CLAY_trans + T_OC_trans + T_CEC_SOIL_trans +
+                        T_TEB_trans + T_ESP_trans + T_ECE_trans)+(elv_trans + gti_trans + ndep_trans +           
+                        co2_trans), random=~1|SP, data = df_wood2)
+
+r.squaredGLMM(NM_wood1)
+r.squaredGLMM(NM_wood2)
+r.squaredGLMM(NM_wood3)
+model_performance(NM_wood1, metrics = "common", verbose = TRUE)
+model_performance(NM_wood2, metrics = "common", verbose = TRUE)
+model_performance(NM_wood3, metrics = "common", verbose = TRUE)
+```
+
+```{r}
+#trees
+NM_tree1 <-lme(log(leafN) ~ (mat_trans + matgs_trans + tmonthmin_trans + tmonthmax_trans + ndaysgs_trans +
+                        mai_trans + maigs_trans + map_trans + pmonthmin_trans + mapgs_trans +
+                        mavgs_trans + mav_trans + alpha_trans + vcmax25_trans + jmax25_trans +
+                        gs_accl_trans + aet_trans + ai_trans + cwdx80_trans)+(pH_trans + 
+                        TP_trans + PBR_trans +  TOTN_trans + TK_trans + 
+                        ORGC_trans + CNrt_trans + ALSA_trans + AWC_CLASS_trans + T_GRAVEL_trans+
+                        T_BULK_DENSITY_trans + T_CEC_CLAY_trans + T_BS_trans + T_CACO3_trans +
+                        T_SAND_trans + T_SILT_trans + T_CLAY_trans + T_OC_trans + T_CEC_SOIL_trans +
+                        T_TEB_trans + T_ESP_trans + T_ECE_trans)+(elv_trans + gti_trans + ndep_trans +           
+                        co2_trans), random=~1|SP, data = df_tree2 )
+
+NM_tree2 <-lme(log(leafP) ~ (mat_trans + matgs_trans + tmonthmin_trans + tmonthmax_trans + ndaysgs_trans +
+                        mai_trans + maigs_trans + map_trans + pmonthmin_trans + mapgs_trans +
+                        mavgs_trans + mav_trans + alpha_trans + vcmax25_trans + jmax25_trans +
+                        gs_accl_trans + aet_trans + ai_trans + cwdx80_trans)+(pH_trans + 
+                        TP_trans + PBR_trans +  TOTN_trans + TK_trans + 
+                        ORGC_trans + CNrt_trans + ALSA_trans + AWC_CLASS_trans + T_GRAVEL_trans+
+                        T_BULK_DENSITY_trans + T_CEC_CLAY_trans + T_BS_trans + T_CACO3_trans +
+                        T_SAND_trans + T_SILT_trans + T_CLAY_trans + T_OC_trans + T_CEC_SOIL_trans +
+                        T_TEB_trans + T_ESP_trans + T_ECE_trans)+(elv_trans + gti_trans + ndep_trans +           
+                        co2_trans), random=~1|SP, data = df_tree2 )
+
+NM_tree3 <-lme(log(LeafNP) ~ (mat_trans + matgs_trans + tmonthmin_trans + tmonthmax_trans + ndaysgs_trans +
+                        mai_trans + maigs_trans + map_trans + pmonthmin_trans + mapgs_trans +
+                        mavgs_trans + mav_trans + alpha_trans + vcmax25_trans + jmax25_trans +
+                        gs_accl_trans + aet_trans + ai_trans + cwdx80_trans)+(pH_trans + 
+                        TP_trans + PBR_trans +  TOTN_trans + TK_trans + 
+                        ORGC_trans + CNrt_trans + ALSA_trans + AWC_CLASS_trans + T_GRAVEL_trans+
+                        T_BULK_DENSITY_trans + T_CEC_CLAY_trans + T_BS_trans + T_CACO3_trans +
+                        T_SAND_trans + T_SILT_trans + T_CLAY_trans + T_OC_trans + T_CEC_SOIL_trans +
+                        T_TEB_trans + T_ESP_trans + T_ECE_trans)+(elv_trans + gti_trans + ndep_trans +           
+                        co2_trans), random=~1|SP, data = df_tree2)
+
+r.squaredGLMM(NM_tree1)
+r.squaredGLMM(NM_tree2)
+r.squaredGLMM(NM_tree3)
+model_performance(NM_tree1, metrics = "common", verbose = TRUE)
+model_performance(NM_tree2, metrics = "common", verbose = TRUE)
+model_performance(NM_tree3, metrics = "common", verbose = TRUE)
+```
+
+```{r}
+#conifers
+NM_Conifer1 <-lme(log(leafN) ~ (mat_trans + matgs_trans + tmonthmin_trans + tmonthmax_trans + ndaysgs_trans +
+                        mai_trans + maigs_trans + map_trans + pmonthmin_trans + mapgs_trans +
+                        mavgs_trans + mav_trans + alpha_trans + vcmax25_trans + jmax25_trans +
+                        gs_accl_trans + aet_trans + ai_trans + cwdx80_trans)+(pH_trans + 
+                        TP_trans + PBR_trans +  TOTN_trans + TK_trans + 
+                        ORGC_trans + CNrt_trans + ALSA_trans + AWC_CLASS_trans + T_GRAVEL_trans+
+                        T_BULK_DENSITY_trans + T_CEC_CLAY_trans + T_BS_trans + T_CACO3_trans +
+                        T_SAND_trans + T_SILT_trans + T_CLAY_trans + T_OC_trans + T_CEC_SOIL_trans +
+                        T_TEB_trans + T_ESP_trans + T_ECE_trans)+(elv_trans + gti_trans + ndep_trans +           
+                        co2_trans), random=~1|SP, data = df_Conifer2 )
+
+NM_Conifer2 <-lme(log(leafP) ~ (mat_trans + matgs_trans + tmonthmin_trans + tmonthmax_trans + ndaysgs_trans +
+                        mai_trans + maigs_trans + map_trans + pmonthmin_trans + mapgs_trans +
+                        mavgs_trans + mav_trans + alpha_trans + vcmax25_trans + jmax25_trans +
+                        gs_accl_trans + aet_trans + ai_trans + cwdx80_trans)+(pH_trans + 
+                        TP_trans + PBR_trans +  TOTN_trans + TK_trans + 
+                        ORGC_trans + CNrt_trans + ALSA_trans + AWC_CLASS_trans + T_GRAVEL_trans+
+                        T_BULK_DENSITY_trans + T_CEC_CLAY_trans + T_BS_trans + T_CACO3_trans +
+                        T_SAND_trans + T_SILT_trans + T_CLAY_trans + T_OC_trans + T_CEC_SOIL_trans +
+                        T_TEB_trans + T_ESP_trans + T_ECE_trans)+(elv_trans + gti_trans + ndep_trans +           
+                        co2_trans), random=~1|SP, data = df_Conifer2)
+
+NM_Conifer3 <-lme(log(LeafNP) ~ (mat_trans + matgs_trans + tmonthmin_trans + tmonthmax_trans + ndaysgs_trans +
+                        mai_trans + maigs_trans + map_trans + pmonthmin_trans + mapgs_trans +
+                        mavgs_trans + mav_trans + alpha_trans + vcmax25_trans + jmax25_trans +
+                        gs_accl_trans + aet_trans + ai_trans + cwdx80_trans)+(pH_trans + 
+                        TP_trans + PBR_trans +  TOTN_trans + TK_trans + 
+                        ORGC_trans + CNrt_trans + ALSA_trans + AWC_CLASS_trans + T_GRAVEL_trans+
+                        T_BULK_DENSITY_trans + T_CEC_CLAY_trans + T_BS_trans + T_CACO3_trans +
+                        T_SAND_trans + T_SILT_trans + T_CLAY_trans + T_OC_trans + T_CEC_SOIL_trans +
+                        T_TEB_trans + T_ESP_trans + T_ECE_trans)+(elv_trans + gti_trans + ndep_trans +           
+                        co2_trans), random=~1|SP, data = df_Conifer2)
+
+r.squaredGLMM(NM_Conifer1)
+r.squaredGLMM(NM_Conifer2)
+r.squaredGLMM(NM_Conifer3)
+model_performance(NM_Conifer1, metrics = "common", verbose = TRUE)
+model_performance(NM_Conifer2, metrics = "common", verbose = TRUE)
+model_performance(NM_Conifer3, metrics = "common", verbose = TRUE)
+```
+
+```{r}
+#Evergreen broadleaf
+NM_Eb1 <-lme(log(leafN) ~ (mat_trans + matgs_trans + tmonthmin_trans + tmonthmax_trans + ndaysgs_trans +
+                        mai_trans + maigs_trans + map_trans + pmonthmin_trans + mapgs_trans +
+                        mavgs_trans + mav_trans + alpha_trans + vcmax25_trans + jmax25_trans +
+                        gs_accl_trans + aet_trans + ai_trans + cwdx80_trans)+(pH_trans + 
+                        TP_trans + PBR_trans +  TOTN_trans + TK_trans + 
+                        ORGC_trans + CNrt_trans + ALSA_trans + AWC_CLASS_trans + T_GRAVEL_trans+
+                        T_BULK_DENSITY_trans + T_CEC_CLAY_trans + T_BS_trans + T_CACO3_trans +
+                        T_SAND_trans + T_SILT_trans + T_CLAY_trans + T_OC_trans + T_CEC_SOIL_trans +
+                        T_TEB_trans + T_ESP_trans + T_ECE_trans)+(elv_trans + gti_trans + ndep_trans +           
+                        co2_trans), random=~1|SP, data = df_Eb2)
+
+NM_Eb2 <-lme(log(leafP) ~ (mat_trans + matgs_trans + tmonthmin_trans + tmonthmax_trans + ndaysgs_trans +
+                        mai_trans + maigs_trans + map_trans + pmonthmin_trans + mapgs_trans +
+                        mavgs_trans + mav_trans + alpha_trans + vcmax25_trans + jmax25_trans +
+                        gs_accl_trans + aet_trans + ai_trans + cwdx80_trans)+(pH_trans + 
+                        TP_trans + PBR_trans +  TOTN_trans + TK_trans + 
+                        ORGC_trans + CNrt_trans + ALSA_trans + AWC_CLASS_trans + T_GRAVEL_trans+
+                        T_BULK_DENSITY_trans + T_CEC_CLAY_trans + T_BS_trans + T_CACO3_trans +
+                        T_SAND_trans + T_SILT_trans + T_CLAY_trans + T_OC_trans + T_CEC_SOIL_trans +
+                        T_TEB_trans + T_ESP_trans + T_ECE_trans)+(elv_trans + gti_trans + ndep_trans +           
+                        co2_trans), random=~1|SP, data = df_Eb2)
+
+NM_Eb3 <-lme(log(LeafNP) ~ (mat_trans + matgs_trans + tmonthmin_trans + tmonthmax_trans + ndaysgs_trans +
+                        mai_trans + maigs_trans + map_trans + pmonthmin_trans + mapgs_trans +
+                        mavgs_trans + mav_trans + alpha_trans + vcmax25_trans + jmax25_trans +
+                        gs_accl_trans + aet_trans + ai_trans + cwdx80_trans)+(pH_trans + 
+                        TP_trans + PBR_trans +  TOTN_trans + TK_trans + 
+                        ORGC_trans + CNrt_trans + ALSA_trans + AWC_CLASS_trans + T_GRAVEL_trans+
+                        T_BULK_DENSITY_trans + T_CEC_CLAY_trans + T_BS_trans + T_CACO3_trans +
+                        T_SAND_trans + T_SILT_trans + T_CLAY_trans + T_OC_trans + T_CEC_SOIL_trans +
+                        T_TEB_trans + T_ESP_trans + T_ECE_trans)+(elv_trans + gti_trans + ndep_trans +           
+                        co2_trans), random=~1|SP, data = df_Eb2)
+
+r.squaredGLMM(NM_Eb1)
+r.squaredGLMM(NM_Eb2)
+r.squaredGLMM(NM_Eb3)
+model_performance(NM_Eb1, metrics = "common", verbose = TRUE)
+model_performance(NM_Eb2, metrics = "common", verbose = TRUE)
+model_performance(NM_Eb3, metrics = "common", verbose = TRUE)
+```
+
+```{r}
+#Deciduous broadleaf
+NM_Deci1 <-lme(log(leafN) ~ (mat_trans + matgs_trans + tmonthmin_trans + tmonthmax_trans + ndaysgs_trans +
+                        mai_trans + maigs_trans + map_trans + pmonthmin_trans + mapgs_trans +
+                        mavgs_trans + mav_trans + alpha_trans + vcmax25_trans + jmax25_trans +
+                        gs_accl_trans + aet_trans + ai_trans + cwdx80_trans)+(pH_trans + 
+                        TP_trans + PBR_trans +  TOTN_trans + TK_trans + 
+                        ORGC_trans + CNrt_trans + ALSA_trans + AWC_CLASS_trans + T_GRAVEL_trans+
+                        T_BULK_DENSITY_trans + T_CEC_CLAY_trans + T_BS_trans + T_CACO3_trans +
+                        T_SAND_trans + T_SILT_trans + T_CLAY_trans + T_OC_trans + T_CEC_SOIL_trans +
+                        T_TEB_trans + T_ESP_trans + T_ECE_trans)+(elv_trans + gti_trans + ndep_trans +           
+                        co2_trans), random=~1|SP, data = df_Deci2)
+
+NM_Deci2 <-lme(log(leafP) ~ (mat_trans + matgs_trans + tmonthmin_trans + tmonthmax_trans + ndaysgs_trans +
+                        mai_trans + maigs_trans + map_trans + pmonthmin_trans + mapgs_trans +
+                        mavgs_trans + mav_trans + alpha_trans + vcmax25_trans + jmax25_trans +
+                        gs_accl_trans + aet_trans + ai_trans + cwdx80_trans)+(pH_trans + 
+                        TP_trans + PBR_trans +  TOTN_trans + TK_trans + 
+                        ORGC_trans + CNrt_trans + ALSA_trans + AWC_CLASS_trans + T_GRAVEL_trans+
+                        T_BULK_DENSITY_trans + T_CEC_CLAY_trans + T_BS_trans + T_CACO3_trans +
+                        T_SAND_trans + T_SILT_trans + T_CLAY_trans + T_OC_trans + T_CEC_SOIL_trans +
+                        T_TEB_trans + T_ESP_trans + T_ECE_trans)+(elv_trans + gti_trans + ndep_trans +           
+                        co2_trans), random=~1|SP, data = df_Deci2)
+
+NM_Deci3 <-lme(log(LeafNP) ~ (mat_trans + matgs_trans + tmonthmin_trans + tmonthmax_trans + ndaysgs_trans +
+                        mai_trans + maigs_trans + map_trans + pmonthmin_trans + mapgs_trans +
+                        mavgs_trans + mav_trans + alpha_trans + vcmax25_trans + jmax25_trans +
+                        gs_accl_trans + aet_trans + ai_trans + cwdx80_trans)+(pH_trans + 
+                        TP_trans + PBR_trans +  TOTN_trans + TK_trans + 
+                        ORGC_trans + CNrt_trans + ALSA_trans + AWC_CLASS_trans + T_GRAVEL_trans+
+                        T_BULK_DENSITY_trans + T_CEC_CLAY_trans + T_BS_trans + T_CACO3_trans +
+                        T_SAND_trans + T_SILT_trans + T_CLAY_trans + T_OC_trans + T_CEC_SOIL_trans +
+                        T_TEB_trans + T_ESP_trans + T_ECE_trans)+(elv_trans + gti_trans + ndep_trans +           
+                        co2_trans), random=~1|SP, data = df_Deci2)
+
+r.squaredGLMM(NM_Deci1)
+model_performance(NM_Deci1, metrics = "common", verbose = TRUE)
+model_performance(NM_Deci2, metrics = "common", verbose = TRUE)
+model_performance(NM_Deci3, metrics = "common", verbose = TRUE)
+```
+
+```{r}
+#grass
+NM_grass1 <-lme(log(leafN) ~ (mat_trans + matgs_trans + tmonthmin_trans + tmonthmax_trans + ndaysgs_trans +
+                        mai_trans + maigs_trans + map_trans + pmonthmin_trans + mapgs_trans +
+                        mavgs_trans + mav_trans + alpha_trans + vcmax25_trans + jmax25_trans +
+                        gs_accl_trans + aet_trans + ai_trans + cwdx80_trans)+(pH_trans + 
+                        TP_trans + PBR_trans +  TOTN_trans + TK_trans + 
+                        ORGC_trans + CNrt_trans + ALSA_trans + AWC_CLASS_trans + T_GRAVEL_trans+
+                        T_BULK_DENSITY_trans + T_CEC_CLAY_trans + T_BS_trans + T_CACO3_trans +
+                        T_SAND_trans + T_SILT_trans + T_CLAY_trans + T_OC_trans + T_CEC_SOIL_trans +
+                        T_TEB_trans + T_ESP_trans + T_ECE_trans)+(elv_trans + gti_trans + ndep_trans +          
+                        co2_trans), random=~1|SP, data = df_grass2)
+
+NM_grass2 <-lme(log(leafP) ~ (mat_trans + matgs_trans + tmonthmin_trans + tmonthmax_trans + ndaysgs_trans +
+                        mai_trans + maigs_trans + map_trans + pmonthmin_trans + mapgs_trans +
+                        mavgs_trans + mav_trans + alpha_trans + vcmax25_trans + jmax25_trans +
+                        gs_accl_trans + aet_trans + ai_trans + cwdx80_trans)+(pH_trans + 
+                        TP_trans + PBR_trans +  TOTN_trans + TK_trans + 
+                        ORGC_trans + CNrt_trans + ALSA_trans + AWC_CLASS_trans + T_GRAVEL_trans+
+                        T_BULK_DENSITY_trans + T_CEC_CLAY_trans + T_BS_trans + T_CACO3_trans +
+                        T_SAND_trans + T_SILT_trans + T_CLAY_trans + T_OC_trans + T_CEC_SOIL_trans +
+                        T_TEB_trans + T_ESP_trans + T_ECE_trans)+(elv_trans + gti_trans + ndep_trans +          
+                        co2_trans), random=~1|SP, data = df_grass2)
+
+NM_grass3 <-lme(log(LeafNP) ~ (mat_trans + matgs_trans + tmonthmin_trans + tmonthmax_trans + ndaysgs_trans +
+                        mai_trans + maigs_trans + map_trans + pmonthmin_trans + mapgs_trans +
+                        mavgs_trans + mav_trans + alpha_trans + vcmax25_trans + jmax25_trans +
+                        gs_accl_trans + aet_trans + ai_trans + cwdx80_trans)+(pH_trans + 
+                        TP_trans + PBR_trans +  TOTN_trans + TK_trans + 
+                        ORGC_trans + CNrt_trans + ALSA_trans + AWC_CLASS_trans + T_GRAVEL_trans+
+                        T_BULK_DENSITY_trans + T_CEC_CLAY_trans + T_BS_trans + T_CACO3_trans +
+                        T_SAND_trans + T_SILT_trans + T_CLAY_trans + T_OC_trans + T_CEC_SOIL_trans +
+                        T_TEB_trans + T_ESP_trans + T_ECE_trans)+(elv_trans + gti_trans + ndep_trans +         
+                        co2_trans), random=~1|SP, data = df_grass2)
+r.squaredGLMM(NM_grass3)
+model_performance(NM_grass1, metrics = "common", verbose = TRUE)
+model_performance(NM_grass2, metrics = "common", verbose = TRUE)
+model_performance(NM_grass3, metrics = "common", verbose = TRUE)
+```
+
+# climate vs soil explaination of site-level leaf N-P
+
+```{r}
+# make different classifications of the variables
+trgts <- c("leafN", "leafP", "LeafNP")
+preds <- c("elv", "mat_trans", "matgs_trans", "tmonthmin_trans", "tmonthmax_trans", "ndaysgs_trans",
+           "mai_trans", "maigs_trans", "map_trans", "pmonthmin_trans", "mapgs_trans", "mavgs_trans",
+           "mav_trans", "alpha_trans", "vcmax25_trans", "jmax25_trans", "gs_accl_trans", "aet_trans",
+           "ai_trans", "cwdx80_trans", "gti_trans", "ndep_trans", "co2_trans", "T_BULK_DENSITY_trans",
+           "AWC_CLASS_trans", "T_CLAY_trans", "T_SILT_trans", "T_SAND_trans", "T_GRAVEL_trans",
+           "pH_trans", "T_TEB_trans", "T_BS_trans", "T_CEC_SOIL_trans", "T_CEC_CLAY_trans", 
+           "T_ECE_trans", "T_ESP_trans", "T_CACO3_trans", "T_OC_trans", "ORGC_trans", "TOTN_trans",
+           "CNrt_trans", "ALSA_trans", "PBR_trans", "TP_trans", "TK_trans")
+preds_soil <- c("T_BULK_DENSITY_trans", "AWC_CLASS_trans", "T_CLAY_trans", "T_SILT_trans", "T_SAND_trans",
+                "T_GRAVEL_trans", "pH_trans", "T_TEB_trans", "T_BS_trans", "T_CEC_SOIL_trans",
+                "T_CEC_CLAY_trans", "T_ECE_trans", "T_ESP_trans", "T_CACO3_trans", "T_OC_trans", "ORGC_trans",
+                "TOTN_trans", "CNrt_trans", "ALSA_trans", "PBR_trans", "TP_trans", "TK_trans")
+  
+preds_climate <- c("mat_trans", "matgs_trans", "tmonthmin_trans", "tmonthmax_trans", "ndaysgs_trans",
+                   "mai_trans", "maigs_trans", "map_trans", "pmonthmin_trans", "mapgs_trans", "mavgs_trans",
+                   "mav_trans", "alpha_trans", "vcmax25_trans", "jmax25_trans", "gs_accl_trans", "aet_trans",
+                   "ai_trans", "cwdx80_trans")
+preds_other <- c("elv", "gti_trans", "ndep_trans", "co2_trans")
+preds_pmodeloutputs <- c("vcmax25_trans", "jmax25_trans", "gs_accl_trans")
+preds_pmodelinputs <- c("mat_trans", "matgs_trans", "mai_trans", "maigs_trans", "mav_trans", "mavgs_trans",
+                        "elv", "co2_trans")
+
+# calculate site-mean leaf N-P and number of records at each site
+dfs <- dat %>% 
+       mutate(elv_grp = elv) %>% 
+       group_by(lon, lat, elv_grp, sitename) %>% 
+       summarise(across(c(preds, trgts), ~(mean(.x, na.rm = TRUE)))) %>% 
+       left_join(dat %>% 
+                 group_by(sitename) %>% 
+                 summarise(nobs = n()),
+                 by = "sitename") %>% 
+      ungroup()
+saveRDS(dfs, file = "dfs_leafnp_20210911.rds")
+```
+#Visualise missing data.
+```{r}
+vis_miss(dfs %>% dplyr::select(trgts, preds), warn_large_data = F)
+```
+
+#Look at the explaination of Envi (climate vs soil) at site-level
+```{r}
+#site mean leaf N
+NM_site1 <- lm(terms(log(leafN)~(mat_trans + matgs_trans + tmonthmin_trans + tmonthmax_trans + 
+                                ndaysgs_trans + mai_trans + maigs_trans + map_trans + pmonthmin_trans +
+                                mapgs_trans + mavgs_trans + mav_trans + alpha_trans + vcmax25_trans +
+                                jmax25_trans + gs_accl_trans + aet_trans + ai_trans + cwdx80_trans)+
+                               (pH_trans + TP_trans + PBR_trans +  TOTN_trans + TK_trans + ORGC_trans +                                           CNrt_trans + ALSA_trans + AWC_CLASS_trans + T_GRAVEL_trans + 
+                                T_BULK_DENSITY_trans + T_CEC_CLAY_trans + T_BS_trans + T_CACO3_trans + 
+                                T_SAND_trans + T_SILT_trans + T_CLAY_trans + T_OC_trans + T_CEC_SOIL_trans +
+                                 T_TEB_trans + T_ESP_trans + T_ECE_trans),keep.order = T),data = dfs)
+
+NM_site2 <- lm(terms(log(leafN)~(pH_trans + TP_trans + PBR_trans +  TOTN_trans + TK_trans + ORGC_trans +                                           CNrt_trans + ALSA_trans + AWC_CLASS_trans + T_GRAVEL_trans + 
+                                T_BULK_DENSITY_trans + T_CEC_CLAY_trans + T_BS_trans + T_CACO3_trans + 
+                                T_SAND_trans + T_SILT_trans + T_CLAY_trans + T_OC_trans + T_CEC_SOIL_trans +
+                                 T_TEB_trans + T_ESP_trans + T_ECE_trans)+(mat_trans + matgs_trans +  
+                                tmonthmin_trans + tmonthmax_trans + ndaysgs_trans + mai_trans + maigs_trans +
+                                map_trans + pmonthmin_trans + mapgs_trans + mavgs_trans + mav_trans + 
+                                alpha_trans + vcmax25_trans + jmax25_trans + gs_accl_trans + aet_trans +
+                                ai_trans + cwdx80_trans),keep.order = T),data = dfs)
+anova(NM_site1)
+anova(NM_site2)
+```
+
+```{r}
+#leaf P
+PM_site1 <- lm(terms(log(leafP)~(mat_trans + matgs_trans + tmonthmin_trans + tmonthmax_trans + 
+                                ndaysgs_trans + mai_trans + maigs_trans + map_trans + pmonthmin_trans +
+                                mapgs_trans + mavgs_trans + mav_trans + alpha_trans + vcmax25_trans +
+                                jmax25_trans + gs_accl_trans + aet_trans + ai_trans + cwdx80_trans)+
+                               (pH_trans + TP_trans + PBR_trans +  TOTN_trans + TK_trans + ORGC_trans +                                         CNrt_trans + ALSA_trans + AWC_CLASS_trans + T_GRAVEL_trans + 
+                                T_BULK_DENSITY_trans + T_CEC_CLAY_trans + T_BS_trans + T_CACO3_trans + 
+                                T_SAND_trans + T_SILT_trans + T_CLAY_trans + T_OC_trans + T_CEC_SOIL_trans +
+                                T_TEB_trans + T_ESP_trans + T_ECE_trans),keep.order = T),data = dfs)
+
+PM_site2 <- lm(terms(log(leafP)~(pH_trans + TP_trans + PBR_trans +  TOTN_trans + TK_trans + ORGC_trans +                                        CNrt_trans + ALSA_trans + AWC_CLASS_trans + T_GRAVEL_trans + 
+                                T_BULK_DENSITY_trans + T_CEC_CLAY_trans + T_BS_trans + T_CACO3_trans + 
+                                T_SAND_trans + T_SILT_trans + T_CLAY_trans + T_OC_trans + T_CEC_SOIL_trans +
+                                T_TEB_trans + T_ESP_trans + T_ECE_trans)+(mat_trans + matgs_trans +
+                                tmonthmin_trans + tmonthmax_trans + ndaysgs_trans + mai_trans + maigs_trans +
+                                map_trans + pmonthmin_trans + mapgs_trans + mavgs_trans + mav_trans +
+                                alpha_trans + vcmax25_trans + jmax25_trans + gs_accl_trans + aet_trans +
+                                ai_trans + cwdx80_trans),keep.order = T),data = dfs)
+anova(PM_site1)
+anova(PM_site2)
+```
+
+```{r}
+#leaf N:P
+NPM_site1 <- lm(terms(log(LeafNP)~(mat_trans + matgs_trans + tmonthmin_trans + tmonthmax_trans + 
+                                ndaysgs_trans + mai_trans + maigs_trans + map_trans + pmonthmin_trans +
+                                mapgs_trans + mavgs_trans + mav_trans + alpha_trans + vcmax25_trans +
+                                jmax25_trans + gs_accl_trans + aet_trans + ai_trans + cwdx80_trans)+
+                               (pH_trans + TP_trans + PBR_trans +  TOTN_trans + TK_trans + ORGC_trans +                                           CNrt_trans + ALSA_trans + AWC_CLASS_trans + T_GRAVEL_trans + 
+                                T_BULK_DENSITY_trans + T_CEC_CLAY_trans + T_BS_trans + T_CACO3_trans + 
+                                T_SAND_trans + T_SILT_trans + T_CLAY_trans + T_OC_trans + T_CEC_SOIL_trans +
+                                 T_TEB_trans + T_ESP_trans + T_ECE_trans),keep.order = T),data = dfs)
+
+NPM_site2 <- lm(terms(log(LeafNP)~(pH_trans + TP_trans + PBR_trans +  TOTN_trans + TK_trans + ORGC_trans +                                         CNrt_trans + ALSA_trans + AWC_CLASS_trans + T_GRAVEL_trans + 
+                                   T_BULK_DENSITY_trans + T_CEC_CLAY_trans + T_BS_trans + T_CACO3_trans + 
+                                   T_SAND_trans + T_SILT_trans + T_CLAY_trans + T_OC_trans + T_CEC_SOIL_trans +
+                                   T_TEB_trans + T_ESP_trans + T_ECE_trans)+(mat_trans + matgs_trans +
+                                  tmonthmin_trans + tmonthmax_trans + ndaysgs_trans + mai_trans + maigs_trans +
+                                  map_trans + pmonthmin_trans + mapgs_trans + mavgs_trans + mav_trans + 
+                                  alpha_trans + vcmax25_trans + jmax25_trans + gs_accl_trans + aet_trans +
+                                  ai_trans + cwdx80_trans),keep.order = T),data = dfs)
+anova(NPM_site1)
+anova(NPM_site2)
+```
+
+##plot variation partition figure of climate vs soil
+```{r}
+library(ggplot2)
+#install.packages("ggforce")
+library(ggforce)
+#leaf N
+df.venn <- data.frame(x = c(2, 0.8),y = c(1, 1),labels = c("Soil","Climate"))
+ggplot(df.venn, aes(x0 = x, y0 = y, r = 1.5, fill = labels))+
+  geom_circle(alpha = .5, size = 1.2, colour = '#737373',show.legend = TRUE )+
+  coord_fixed()+
+  scale_fill_manual(values=c("honeydew3", "darkseagreen2","pink"))+
+  annotate("text", x = 1.5, y = 1,label="14.6%" ,size = 8,family = "serif")+
+  annotate("text", x = 0.1 , y = 1,label="9.3%" ,size = 8,family = "serif")+
+  annotate("text", x = 2.7 , y = 1,label="3.8%" ,size = 8,family = "serif")+
+  annotate("text", x = -0.5, y = 2.3,label="(a)" ,size = 8,family = "serif")+
+  annotate("text", x = 1.5, y = -0.7,label="Residuals = 72.3" ,size = 5,family = "serif")+
+  theme_void()+
+  theme(legend.position = c(0.74,-0.06),legend.direction = "horizontal",
+        legend.text=element_text(family = "serif",size=20),
+        legend.title = element_text(family = "serif",size=20))
+ggsave("F1_climate_soil_explanation_logleafN.tiff",width = 15,height = 15,units = "cm")
+
+#leaf P
+df.venn <- data.frame(x = c(2, 0.8),y = c(1, 1),labels = c("Soil","Climate"))
+ggplot(df.venn, aes(x0 = x, y0 = y, r = 1.5, fill = labels))+
+  geom_circle(alpha = .5, size = 1.2, colour = '#737373',show.legend = FALSE)+
+  coord_fixed()+
+  scale_fill_manual(values=c("honeydew3", "darkseagreen2","pink"))+
+  annotate("text", x = 1.5, y = 1,label="13.1%" ,size = 8,family = "serif")+
+  annotate("text", x = 0.1 , y = 1,label="10.7%" ,size = 8,family = "serif")+
+  annotate("text", x = 2.7 , y = 1,label="3.7%" ,size = 8,family = "serif")+
+  annotate("text", x = -0.5, y = 2.3,label="(b)" ,size = 8,family = "serif")+
+  annotate("text", x = 1.5, y = -0.7,label="Residuals = 72.6" ,size = 5,family = "serif")+
+  theme_void()
+ggsave("F2_climate_soil_explanation_logleafP.tiff",width = 15,height = 15,units = "cm")
+
+#leaf N:P
+df.venn <- data.frame(x = c(2, 0.8),y = c(1, 1),labels = c("Soil","Climate"))
+ggplot(df.venn, aes(x0 = x, y0 = y, r = 1.5, fill = labels))+
+  geom_circle(alpha = .5, size = 1.2, colour = '#737373',show.legend = FALSE)+
+  coord_fixed()+
+  scale_fill_manual(values=c("honeydew3", "darkseagreen2","pink"))+
+  annotate("text", x = 1.5, y = 1,label="8.9%" ,size = 8,family = "serif")+
+  annotate("text", x = 0.1 , y = 1,label="7.4%" ,size = 8,family = "serif")+
+  annotate("text", x = 2.7 , y = 1,label="1.3%" ,size = 8,family = "serif")+
+  annotate("text", x = -0.5, y = 2.3,label="(c)" ,size = 8,family = "serif")+
+  annotate("text", x = 1.5, y = -0.7,label="Residuals = 82.4" ,size = 5,family = "serif")+
+  theme_void()
+ggsave("F3_climate_soil_explanation_logleafNP.tiff",width = 15,height = 15,units = "cm")
+```
+
+
+
+

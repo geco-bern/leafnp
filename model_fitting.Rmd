@@ -1,0 +1,742 @@
+---
+title: "Model fitting"
+author: "Beni Stocker"
+date: "2022-07-28"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+df_models <- tibble()
+```
+
+## Full data
+
+### Read data
+
+Read full species-level data
+```{r}
+df <- read_csv("~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/leafnp_data_covariates_20210702.csv") %>% 
+  mutate(grass = tree_shrub_Herb == "H")
+```
+
+Filter to use only data from species that were recorded in at least five different sites.
+```{r}
+# yields 398 species
+use_species <- df %>% 
+  dplyr::select(sitename, Species) %>% 
+  distinct() %>% 
+  group_by(Species) %>% 
+  summarise(n = n()) %>% 
+  dplyr::filter(n >= 5) %>% 
+  pull(Species)
+
+df <- df %>% 
+  filter(Species %in% use_species)
+```
+
+### Leaf N
+
+```{r}
+target <- "leafN"
+shortlist <- readRDS(paste0("data/shortlist_", target, ".rds"))
+```
+
+#### LME
+
+#### Random Forest
+
+##### Full
+
+```{r}
+filn <- "data/mod_rf_caret_leafn_species.rds"
+
+if (file.exists(filn) && !overwrite){
+  
+  mod_rf_caret_leafn <- readRDS(filn)
+  
+} else {
+  
+  ## one-hot encoding for Species identity (warning: 3700 species)
+  df1h <- df %>% 
+    recipe(leafN ~ ., data = dplyr::select(df, leafN, all_of(c(shortlist, "Species", "Family_New", "Genus")))) %>% 
+    step_dummy(Species, one_hot = TRUE) %>% 
+    step_dummy(Family_New, one_hot = TRUE) %>% 
+    step_dummy(Genus, one_hot = TRUE) %>% 
+    prep(training = df, retain = TRUE) %>% 
+    juice()
+ 
+  ## create generic formula for the model and define preprocessing steps
+  pp <- recipe(leafN ~ ., data = df1h) %>%
+  
+    ## impute by median as part of the recipe
+    # step_medianimpute(all_predictors())
+    step_impute_median(all_predictors())
+
+
+  traincotrlParams <- trainControl( 
+    method = "cv", 
+    number = 5, 
+    verboseIter = FALSE,
+    savePredictions = "final"
+    )
+  
+  ## best choice
+  tune_grid <- expand.grid( .mtry = floor((ncol(df1h)-2) / 3), 
+                            .min.node.size = 30,
+                            .splitrule = "variance"
+                            )
+  
+  set.seed(1982)
+  
+  mod_rf_caret_leafn_species <- train(
+    pp,
+    data            = df1h,
+    metric          = "RMSE",
+    method          = "ranger",
+    tuneGrid        = tune_grid,
+    trControl       = traincotrlParams,
+    replace         = TRUE,
+    sample.fraction = 0.5
+    # num.trees       = 2000,        # boosted for the final model
+    # importance      = "impurity"   # for variable importance analysis, alternative: "permutation"
+    )
+  
+  mod_rf_caret_leafn_species
+  
+  saveRDS(mod_rf_caret_leafn_species, file = filn)
+}
+
+# results:
+# RMSE      Rsquared   MAE    
+# 3.066831  0.7571712  1.98728
+
+# collect results into df
+addrow <- tibble(target = target,
+                 scale = "full",
+                 model = "rf",
+                 pred = "combined",
+                 rsq = mod_rf_caret_leafn_species$results[["Rsquared"]],
+                 rmse = mod_rf_caret_leafn_species$results[["RMSE"]])
+df_models <- df_models %>% 
+  bind_rows(addrow)
+```
+
+##### Species-only
+
+```{r}
+filn <- "data/mod_rf_caret_leafn_species_phylo.rds"
+
+if (file.exists(filn) && !overwrite){
+  
+  mod_rf_caret_leafn <- readRDS(filn)
+  
+} else {
+  
+  ## one-hot encoding for Species identity (warning: 3700 species)
+  df1h_phylo <- df %>% 
+    recipe(leafN ~ ., data = dplyr::select(df, leafN, all_of(c("Species", "Family_New", "Genus")))) %>% 
+    step_dummy(Species, one_hot = TRUE) %>% 
+    step_dummy(Family_New, one_hot = TRUE) %>% 
+    step_dummy(Genus, one_hot = TRUE) %>% 
+    prep(training = df, retain = TRUE) %>% 
+    juice()
+ 
+  ## create generic formula for the model and define preprocessing steps
+  pp <- recipe(leafN ~ ., data = df1h_phylo)
+
+  traincotrlParams <- trainControl( 
+    method = "cv", 
+    number = 5, 
+    verboseIter = FALSE,
+    savePredictions = "final"
+    )
+  
+  ## best choice
+  tune_grid <- expand.grid( .mtry = floor((ncol(df1h_phylo)-2) / 3), 
+                            .min.node.size = 30,
+                            .splitrule = "variance"
+                            )
+  
+  set.seed(1982)
+  
+  mod_rf_caret_leafn_species_phylo <- train(
+    pp,
+    data            = df1h_phylo,
+    metric          = "RMSE",
+    method          = "ranger",
+    tuneGrid        = tune_grid,
+    trControl       = traincotrlParams,
+    replace         = TRUE,
+    sample.fraction = 0.5
+    # num.trees       = 2000,        # boosted for the final model
+    # importance      = "impurity"   # for variable importance analysis, alternative: "permutation"
+    )
+  
+  mod_rf_caret_leafn_species_phylo
+  
+  saveRDS(mod_rf_caret_leafn_species_phylo, file = filn)
+}
+
+  # RMSE      Rsquared   MAE     
+  # 3.720109  0.6400929  2.569527
+
+# collect results into df
+addrow <- tibble(target = target,
+                 scale = "full",
+                 model = "rf",
+                 pred = "phylo",
+                 rsq = mod_rf_caret_leafn_species_phylo$results[["Rsquared"]],
+                 rmse = mod_rf_caret_leafn_species_phylo$results[["RMSE"]])
+df_models <- df_models %>% 
+  bind_rows(addrow)
+```
+
+### Leaf P
+
+```{r}
+target <- "leafP"
+longlist <- readRDS(paste0("data/longlist_", target, ".rds"))
+```
+
+
+#### LME
+
+#### Random Forest
+
+##### Full
+
+```{r}
+filn <- "data/mod_rf_caret_leafp_species.rds"
+
+if (file.exists(filn) && !overwrite){
+  
+  mod_rf_caret_leafp <- readRDS(filn)
+  
+} else {
+  
+  ## one-hot encoding for Species identity (warning: 3700 species)
+  df1h <- df %>% 
+    recipe(leafP ~ ., data = dplyr::select(df, leafP, all_of(c(longlist, "Species", "Family_New", "Genus")))) %>% 
+    step_dummy(Species, one_hot = TRUE) %>% 
+    step_dummy(Family_New, one_hot = TRUE) %>% 
+    step_dummy(Genus, one_hot = TRUE) %>% 
+    prep(training = df, retain = TRUE) %>% 
+    juice()
+ 
+  ## create generic formula for the model and define preprocessing steps
+  pp <- recipe(leafP ~ ., data = df1h) %>%
+  
+    ## impute by median as part of the recipe
+    # step_medianimpute(all_predictors())
+    step_impute_median(all_predictors())
+
+
+  traincotrlParams <- trainControl( 
+    method = "cv", 
+    number = 5, 
+    verboseIter = FALSE,
+    savePredictions = "final"
+    )
+  
+  ## best choice
+  tune_grid <- expand.grid( .mtry = floor((ncol(df1h)-2) / 3), 
+                            .min.node.size = 30,
+                            .splitrule = "variance"
+                            )
+  
+  set.seed(1982)
+  
+  mod_rf_caret_leafp_species <- train(
+    pp,
+    data            = df1h,
+    metric          = "RMSE",
+    method          = "ranger",
+    tuneGrid        = tune_grid,
+    trControl       = traincotrlParams,
+    replace         = TRUE,
+    sample.fraction = 0.5
+    # num.trees       = 2000,        # boosted for the final model
+    # importance      = "impurity"   # for variable importance analysis, alternative: "permutation"
+    )
+  
+  mod_rf_caret_leafp_species
+  
+  saveRDS(mod_rf_caret_leafp_species, file = filn)
+}
+
+# collect results into df
+addrow <- tibble(target = target,
+                 scale = "full",
+                 model = "rf",
+                 pred = "combined",
+                 rsq = mod_rf_caret_leafp_species$results[["Rsquared"]],
+                 rmse = mod_rf_caret_leafp_species$results[["RMSE"]])
+df_models <- df_models %>% 
+  bind_rows(addrow)
+```
+
+##### Species-only
+
+```{r}
+filn <- "data/mod_rf_caret_leafp_species_phylo.rds"
+
+if (file.exists(filn) && !overwrite){
+  
+  mod_rf_caret_leafp <- readRDS(filn)
+  
+} else {
+  
+  ## one-hot encoding for Species identity (warning: 3700 species)
+  df1h_phylo <- df %>% 
+    recipe(leafP ~ ., data = dplyr::select(df, leafP, all_of(c("Species", "Family_New", "Genus")))) %>% 
+    step_dummy(Species, one_hot = TRUE) %>% 
+    step_dummy(Family_New, one_hot = TRUE) %>% 
+    step_dummy(Genus, one_hot = TRUE) %>% 
+    prep(training = df, retain = TRUE) %>% 
+    juice()
+ 
+  ## create generic formula for the model and define preprocessing steps
+  pp <- recipe(leafP ~ ., data = df1h_phylo)
+
+  traincotrlParams <- trainControl( 
+    method = "cv", 
+    number = 5, 
+    verboseIter = FALSE,
+    savePredictions = "final"
+    )
+  
+  ## best choice
+  tune_grid <- expand.grid( .mtry = floor((ncol(df1h_phylo)-2) / 3), 
+                            .min.node.size = 30,
+                            .splitrule = "variance"
+                            )
+  
+  set.seed(1982)
+  
+  mod_rf_caret_leafp_species_phylo <- train(
+    pp,
+    data            = df1h_phylo,
+    metric          = "RMSE",
+    method          = "ranger",
+    tuneGrid        = tune_grid,
+    trControl       = traincotrlParams,
+    replace         = TRUE,
+    sample.fraction = 0.5
+    # num.trees       = 2000,        # boosted for the final model
+    # importance      = "impurity"   # for variable importance analysis, alternative: "permutation"
+    )
+  
+  mod_rf_caret_leafp_species_phylo
+  
+  saveRDS(mod_rf_caret_leafp_species_phylo, file = filn)
+}
+
+# collect results into df
+addrow <- tibble(target = target,
+                 scale = "full",
+                 model = "rf",
+                 pred = "phylo",
+                 rsq = mod_rf_caret_leafp_species_phylo$results[["Rsquared"]],
+                 rmse = mod_rf_caret_leafp_species_phylo$results[["RMSE"]])
+df_models <- df_models %>% 
+  bind_rows(addrow)
+```
+
+### Leaf N:P
+
+```{r}
+target <- "LeafNP"
+longlist <- readRDS(paste0("data/longlist_", target, ".rds"))
+```
+
+#### LME
+
+#### Random Forest
+
+##### Full
+
+```{r}
+filn <- "data/mod_rf_caret_leafnp_species.rds"
+
+if (file.exists(filn) && !overwrite){
+  
+  mod_rf_caret_leafnp <- readRDS(filn)
+  
+} else {
+  
+  ## one-hot encoding for Species identity (warning: 3700 species)
+  df1h <- df %>% 
+    recipe(LeafNP ~ ., data = dplyr::select(df, LeafNP, all_of(c(longlist, "Species", "Family_New", "Genus")))) %>% 
+    step_dummy(Species, one_hot = TRUE) %>% 
+    step_dummy(Family_New, one_hot = TRUE) %>% 
+    step_dummy(Genus, one_hot = TRUE) %>% 
+    prep(training = df, retain = TRUE) %>% 
+    juice()
+ 
+  ## create generic formula for the model and define preprocessing steps
+  pp <- recipe(LeafNP ~ ., data = df1h) %>%
+  
+    ## impute by median as part of the recipe
+    # step_medianimpute(all_predictors())
+    step_impute_median(all_predictors())
+
+
+  traincotrlParams <- trainControl( 
+    method = "cv", 
+    number = 5, 
+    verboseIter = FALSE,
+    savePredictions = "final"
+    )
+  
+  ## best choice
+  tune_grid <- expand.grid( .mtry = floor((ncol(df1h)-2) / 3), 
+                            .min.node.size = 30,
+                            .splitrule = "variance"
+                            )
+  
+  set.seed(1982)
+  
+  mod_rf_caret_leafnp_species <- train(
+    pp,
+    data            = df1h,
+    metric          = "RMSE",
+    method          = "ranger",
+    tuneGrid        = tune_grid,
+    trControl       = traincotrlParams,
+    replace         = TRUE,
+    sample.fraction = 0.5
+    # num.trees       = 2000,        # boosted for the final model
+    # importance      = "impurity"   # for variable importance analysis, alternative: "permutation"
+    )
+  
+  mod_rf_caret_leafnp_species
+  
+  saveRDS(mod_rf_caret_leafnp_species, file = filn)
+}
+
+# collect results into df
+addrow <- tibble(target = target,
+                 scale = "full",
+                 model = "rf",
+                 pred = "combined",
+                 rsq = mod_rf_caret_leafnp_species$results[["Rsquared"]],
+                 rmse = mod_rf_caret_leafnp_species$results[["RMSE"]])
+df_models <- df_models %>% 
+  bind_rows(addrow)
+```
+
+##### Species-only
+
+```{r}
+filn <- "data/mod_rf_caret_leafnp_species_phylo.rds"
+
+if (file.exists(filn) && !overwrite){
+  
+  mod_rf_caret_leafnp <- readRDS(filn)
+  
+} else {
+  
+  ## one-hot encoding for Species identity (warning: 3700 species)
+  df1h_phylo <- df %>% 
+    recipe(LeafNP ~ ., data = dplyr::select(df, LeafNP, all_of(c("Species", "Family_New", "Genus")))) %>% 
+    step_dummy(Species, one_hot = TRUE) %>% 
+    step_dummy(Family_New, one_hot = TRUE) %>% 
+    step_dummy(Genus, one_hot = TRUE) %>% 
+    prep(training = df, retain = TRUE) %>% 
+    juice()
+ 
+  ## create generic formula for the model and define preprocessing steps
+  pp <- recipe(LeafNP ~ ., data = df1h_phylo)
+
+  traincotrlParams <- trainControl( 
+    method = "cv", 
+    number = 5, 
+    verboseIter = FALSE,
+    savePredictions = "final"
+    )
+  
+  ## best choice
+  tune_grid <- expand.grid( .mtry = floor((ncol(df1h_phylo)-2) / 3), 
+                            .min.node.size = 30,
+                            .splitrule = "variance"
+                            )
+  
+  set.seed(1982)
+  
+  mod_rf_caret_leafnp_species_phylo <- train(
+    pp,
+    data            = df1h_phylo,
+    metric          = "RMSE",
+    method          = "ranger",
+    tuneGrid        = tune_grid,
+    trControl       = traincotrlParams,
+    replace         = TRUE,
+    sample.fraction = 0.5
+    # num.trees       = 2000,        # boosted for the final model
+    # importance      = "impurity"   # for variable importance analysis, alternative: "permutation"
+    )
+  
+  mod_rf_caret_leafnp_species_phylo
+  
+  saveRDS(mod_rf_caret_leafnp_species_phylo, file = filn)
+}
+
+# collect results into df
+addrow <- tibble(target = target,
+                 scale = "full",
+                 model = "rf",
+                 pred = "phylo",
+                 rsq = mod_rf_caret_leafnp_species_phylo$results[["Rsquared"]],
+                 rmse = mod_rf_caret_leafnp_species_phylo$results[["RMSE"]])
+df_models <- df_models %>% 
+  bind_rows(addrow)
+```
+
+## Aggregated to sites
+
+### Aggregate data
+
+Load data aggregated to sites, done in `randomforest_leafnp.Rmd`.
+```{r}
+filn <- "data/dfs_leafnp_20210729.rds"
+
+if (!file.exists(filn)){
+  
+  dfs <- df %>%
+
+    ## remove unplausible leafNP data baed on Dis recommendation
+    dplyr::filter(LeafNP < 70) %>%
+  
+    mutate(elv_grp = elv) %>%
+    group_by(lon, lat, elv_grp, sitename) %>%
+    summarise(across(c(preds, trgts), ~(mean(.x, na.rm = TRUE)))) %>%
+    left_join(df %>%
+                group_by(sitename) %>%
+                summarise(nobs = n()),
+              by = "sitename") %>%
+    ungroup()
+  
+  saveRDS(dfs, file = filn)
+  
+} else {
+  dfs <- readRDS(filn) 
+}
+```
+
+
+### Leaf N
+
+```{r}
+target <- "leafN"
+shortlist <- readRDS(paste0("data/shortlist_", target, ".rds"))
+```
+
+#### LME
+
+#### Random Forest
+
+```{r}
+filn <- "data/mod_rf_caret_leafn.rds"
+overwrite <- FALSE
+
+if (file.exists(filn) && !overwrite){
+  
+  mod_rf_caret_leafn <- readRDS(filn)
+  
+} else {
+ 
+  ## create generic formula for the model and define preprocessing steps
+  pp <- recipe(leafN ~ ., data = dplyr::select(dfs, leafN, all_of(shortlist))) %>%
+  
+    ## impute by median as part of the recipe
+    step_medianimpute(all_predictors())
+    # step_impute_median(all_predictors())
+
+  traincotrlParams <- trainControl( 
+    method = "cv", 
+    number = 5, 
+    verboseIter = FALSE,
+    savePredictions = "final"
+    )
+  
+  ## best choice
+  tune_grid <- expand.grid( .mtry = 3, 
+                            .min.node.size = 8,
+                            .splitrule = "variance"
+                            )
+  
+  set.seed(1982)
+  
+  mod_rf_caret_leafn <- train(
+    pp,
+    data            = dplyr::select(dfs, leafN, all_of(shortlist)),
+    metric          = "RMSE",
+    method          = "ranger",
+    tuneGrid        = tune_grid,
+    trControl       = traincotrlParams,
+    replace         = TRUE,
+    sample.fraction = 0.5,
+    num.trees       = 2000,        # boosted for the final model
+    importance      = "impurity"   # for variable importance analysis, alternative: "permutation"
+    )
+  
+  mod_rf_caret_leafn
+  
+  saveRDS(mod_rf_caret_leafn, file = filn)
+}
+
+# collect results into df
+addrow <- tibble(target = target,
+                 scale = "aggregated",
+                 model = "rf",
+                 pred = "combined",
+                 rsq = mod_rf_caret_leafn_species$results[["Rsquared"]],
+                 rmse = mod_rf_caret_leafn_species$results[["RMSE"]])
+df_models <- df_models %>% 
+  bind_rows(addrow)
+```
+
+### Leaf P
+
+```{r}
+target <- "leafP"
+longlist <- readRDS(paste0("data/longlist_", target, ".rds"))
+```
+
+#### LME
+
+#### Random Forest
+
+```{r}
+filn <- "data/mod_rf_caret_leafp.rds"
+overwrite <- FALSE
+
+if (file.exists(filn) && !overwrite){
+  
+  mod_rf_caret_leafp <- readRDS(filn)
+  
+} else {
+ 
+  ## create generic formula for the model and define preprocessing steps
+  pp <- recipe(leafP ~ ., data = dplyr::select(dfs, leafP, all_of(shortlist))) %>%
+  
+    ## impute by median as part of the recipe
+    step_medianimpute(all_predictors())
+    # step_impute_median(all_predictors())
+
+  traincotrlParams <- trainControl( 
+    method = "cv", 
+    number = 5, 
+    verboseIter = FALSE,
+    savePredictions = "final"
+    )
+  
+  ## best choice
+  tune_grid <- expand.grid( .mtry = 3, 
+                            .min.node.size = 8,
+                            .splitrule = "variance"
+                            )
+  
+  set.seed(1982)
+  
+  mod_rf_caret_leafp <- train(
+    pp,
+    data            = dplyr::select(dfs, leafP, all_of(shortlist)),
+    metric          = "RMSE",
+    method          = "ranger",
+    tuneGrid        = tune_grid,
+    trControl       = traincotrlParams,
+    replace         = TRUE,
+    sample.fraction = 0.5,
+    num.trees       = 2000,        # boosted for the final model
+    importance      = "impurity"   # for variable importance analysis, alternative: "permutation"
+    )
+  
+  mod_rf_caret_leafp
+  
+  saveRDS(mod_rf_caret_leafp, file = filn)
+}
+
+# collect results into df
+addrow <- tibble(target = target,
+                 scale = "aggregated",
+                 model = "rf",
+                 pred = "combined",
+                 rsq = mod_rf_caret_leafp_species$results[["Rsquared"]],
+                 rmse = mod_rf_caret_leafp_species$results[["RMSE"]])
+df_models <- df_models %>% 
+  bind_rows(addrow)
+```
+
+### Leaf N:P
+
+```{r}
+target <- "LeafNP"
+longlist <- readRDS(paste0("data/longlist_", target, ".rds"))
+```
+
+#### LME
+
+#### Random Forest
+
+```{r}
+filn <- "data/mod_rf_caret_leafnp.rds"
+overwrite <- FALSE
+
+if (file.exists(filn) && !overwrite){
+  
+  mod_rf_caret_leafnp <- readRDS(filn)
+  
+} else {
+ 
+  ## create generic formula for the model and define preprocessing steps
+  pp <- recipe(LeafNP ~ ., data = dplyr::select(dfs, LeafNP, all_of(shortlist))) %>%
+  
+    ## impute by median as part of the recipe
+    step_medianimpute(all_predictors())
+    # step_impute_median(all_predictors())
+
+  traincotrlParams <- trainControl( 
+    method = "cv", 
+    number = 5, 
+    verboseIter = FALSE,
+    savePredictions = "final"
+    )
+  
+  ## best choice
+  tune_grid <- expand.grid( .mtry = 3, 
+                            .min.node.size = 8,
+                            .splitrule = "variance"
+                            )
+  
+  set.seed(1982)
+  
+  mod_rf_caret_leafnp <- train(
+    pp,
+    data            = dplyr::select(dfs, LeafNP, all_of(shortlist)),
+    metric          = "RMSE",
+    method          = "ranger",
+    tuneGrid        = tune_grid,
+    trControl       = traincotrlParams,
+    replace         = TRUE,
+    sample.fraction = 0.5,
+    num.trees       = 2000,        # boosted for the final model
+    importance      = "impurity"   # for variable importance analysis, alternative: "permutation"
+    )
+  
+  mod_rf_caret_leafnp
+  
+  saveRDS(mod_rf_caret_leafnp, file = filn)
+}
+
+# collect results into df
+addrow <- tibble(target = target,
+                 scale = "aggregated",
+                 model = "rf",
+                 pred = "combined",
+                 rsq = mod_rf_caret_leafnp_species$results[["Rsquared"]],
+                 rmse = mod_rf_caret_leafnp_species$results[["RMSE"]])
+df_models <- df_models %>% 
+  bind_rows(addrow)
+```

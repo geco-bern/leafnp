@@ -21,6 +21,8 @@ library(forcats)
 overwrite <- FALSE
 ```
 
+This looks at feature elimination results and makes the selection of the most important predictors for subsequent (final) model fitting (in other Rmd files).
+
 Obtain outputs from Euler, generated with `feature_elimination_leafnp.R`. Download CSV files into `data/`
 
 Load data aggregated to sites, done in `randomforest_leafnp.Rmd`.
@@ -47,8 +49,9 @@ With this, we can re-create the feature elimination, getting name of candidate p
 df_fe_summary_reconstr <- df_fe %>% 
   group_by(level) %>% 
   filter(rsq == max(rsq)) %>% 
+  drop_na(pred) %>% 
   ungroup() %>% 
-  select(-level)
+  select(rsq, pred, step = level)
 
 all_equal(df_fe_summary, df_fe_summary_reconstr)
 ```
@@ -64,53 +67,56 @@ df_fe_summary %>%
   coord_flip()
 ```
 
-This is a bit misleading as `"ndep"` doesn't appear.
-```{r}
-preds <- c("elv", "mat", "matgs", "tmonthmin", "tmonthmax", "ndaysgs", "mai", "maigs", "map", "pmonthmin",
-           "mapgs", "mavgs", "mav", "alpha", "vcmax25", "jmax25", "gs_accl", "aet", "ai", "cwdx80", "gti",
-           "ndep", "co2", "T_BULK_DENSITY", "AWC_CLASS", "T_CLAY", "T_SILT", "T_SAND", "T_GRAVEL", "T_PH_H2O",
-           "T_TEB", "T_BS", "T_CEC_SOIL", "T_CEC_CLAY", "T_ECE", "T_ESP", "T_CACO3", "T_OC", "ORGC", "TOTN",
-           "CNrt", "ALSA", "PBR", "TP", "TK")
-preds[which(!(preds %in% df_fe_summary$pred))]
-```
+<!-- This is a bit misleading as `"ndep"` doesn't appear. -->
+<!-- ```{r} -->
+<!-- preds <- c("elv", "mat", "matgs", "tmonthmin", "tmonthmax", "ndaysgs", "mai", "maigs", "map", "pmonthmin", -->
+<!--            "mapgs", "mavgs", "mav", "alpha", "vcmax25", "jmax25", "gs_accl", "aet", "ai", "cwdx80", "gti", -->
+<!--            "ndep", "co2", "T_BULK_DENSITY", "AWC_CLASS", "T_CLAY", "T_SILT", "T_SAND", "T_GRAVEL", "T_PH_H2O", -->
+<!--            "T_TEB", "T_BS", "T_CEC_SOIL", "T_CEC_CLAY", "T_ECE", "T_ESP", "T_CACO3", "T_OC", "ORGC", "TOTN", -->
+<!--            "CNrt", "ALSA", "PBR", "TP", "TK") -->
+<!-- preds[which(!(preds %in% df_fe_summary$pred))] -->
+<!-- ``` -->
 
-This is because it is the only remaining variable in the last model. 
+<!-- This is because it is the only remaining variable in the last model.  -->
 
-Let's change that so that the column `preds` can be interpreted more clearly.
+<!-- Let's change that so that the column `preds` can be interpreted more clearly. -->
 
-First, `pred = NA` can be interpreted as a model including all predictors.
-```{r}
-df_fe_summary <- df_fe_summary %>% 
-  mutate(pred = ifelse(is.na(pred), "ALL", pred))
-```
+<!-- First, `pred = NA` can be interpreted as a model including all predictors. -->
+<!-- ```{r} -->
+<!-- df_fe_summary <- df_fe_summary %>%  -->
+<!--   mutate(pred = ifelse(is.na(pred), "ALL", pred)) -->
+<!-- ``` -->
 
-Second, the data frame `df_fe_summary` as written by the feature elimination contains information `pred` interpreted as the variable dropped in the respective step. Instead re-define it so that it is to be interpreted as the *variable added*, relative to the model of the row below. Like this, the bottom row is for `"ndep"` (single variable-model), and the row above that is for `"mai"` where the rsq is given for the model that contains `"ndep + mai"`. The top row is for the model containing all predictors. Interestingly, the highest rsq (based on 5-fold cross-validation!) is achieved 
-```{r}
-df_fe_summary <- df_fe_summary %>% 
-  filter(pred == "ALL") %>% 
-  bind_rows(df_fe_summary %>% 
-              filter(pred != "ALL")) %>% 
-  mutate(pred_new = lead(pred)) %>%
-  mutate(pred_new = ifelse(is.na(pred_new), "ndep", pred_new)) %>% 
-  select(-pred) %>% 
-  rename(pred = pred_new) %>% 
-  mutate(step = rev(1:n())) %>%
-  mutate(pred = fct_reorder(pred, step))
-```
+<!-- Second, the data frame `df_fe_summary` as written by the feature elimination contains information `pred` interpreted as the variable dropped in the respective step. Instead re-define it so that it is to be interpreted as the *variable added*, relative to the model of the row below. Like this, the bottom row is for `"ndep"` (single variable-model), and the row above that is for `"mai"` where the rsq is given for the model that contains `"ndep + mai"`. The top row is for the model containing all predictors. Interestingly, the highest rsq (based on 5-fold cross-validation!) is achieved  -->
+<!-- ```{r} -->
+<!-- df_fe_summary <- df_fe_summary %>%  -->
+<!--   filter(pred == "ALL") %>%  -->
+<!--   bind_rows(df_fe_summary %>%  -->
+<!--               filter(pred != "ALL")) %>%  -->
+<!--   mutate(pred_new = lead(pred)) %>% -->
+<!--   mutate(pred_new = ifelse(is.na(pred_new), "ndep", pred_new)) %>%  -->
+<!--   select(-pred) %>%  -->
+<!--   rename(pred = pred_new) %>%  -->
+<!--   mutate(step = rev(1:n())) %>% -->
+<!--   mutate(pred = fct_reorder(pred, step)) -->
+<!-- ``` -->
 
 ```{r}
 df_fe_summary %>% 
   mutate(highlight = ifelse(pred == "ALSA", "yes", "no")) %>% 
+  mutate(pred = fct_reorder(pred, step)) %>%
   ggplot(aes(pred, rsq, fill = highlight)) +
   scale_fill_manual( values = c( "yes"="tomato", "no"="gray50" ), guide = FALSE ) +
   geom_bar(stat = "identity") +
   labs(x = "", y = expression(italic(R)^2)) +
   coord_flip() +
   theme_classic()
+
 ggsave("fig/rsq_stepwise_leafN.pdf", width = 6, height = 6)
 
 gga1 <- df_fe_summary %>% 
   mutate(highlight = ifelse(pred == "ALSA", "yes", "no")) %>% 
+  mutate(pred = fct_reorder(pred, step)) %>%
   tail(n = 10) %>% 
   ggplot(aes(pred, rsq, fill = highlight)) +
   scale_fill_manual( values = c( "yes"="tomato", "no"="gray50" ), guide = FALSE ) +
@@ -118,6 +124,7 @@ gga1 <- df_fe_summary %>%
   labs(x = "", y = expression(italic(R)^2)) +
   coord_flip() +
   theme_classic()
+
 gga1
 ggsave("fig/rsq_stepwise_leafN_sub.pdf", width = 6, height = 6)
 write_csv(df_fe_summary, file = "data/df_fe_summary_leafn.csv")
@@ -136,6 +143,9 @@ shortlist <- df_fe_summary %>%
   pull(pred) %>% 
   as.character()
 shortlist
+
+saveRDS(shortlist, file = paste0("data/shortlist_", target, ".rds"))
+saveRDS(longlist, file = paste0("data/longlist_", target, ".rds"))
 ```
 
 ### Train final model
@@ -628,44 +638,45 @@ df_fe <- read_csv(paste0("data/df_fe_", target, ".csv"))
 df_vip <- read_csv(paste0("data/df_vip_", target, ".csv"))
 ```
 
-`df_fe_summary` provides information about the updated R2 after respective variable was dropped. This is a bit misleading as the last dropped variable doesn't appear.
-```{r}
-preds <- c("elv", "mat", "matgs", "tmonthmin", "tmonthmax", "ndaysgs", "mai", "maigs", "map", "pmonthmin",
-           "mapgs", "mavgs", "mav", "alpha", "vcmax25", "jmax25", "gs_accl", "aet", "ai", "cwdx80", "gti",
-           "ndep", "co2", "T_BULK_DENSITY", "AWC_CLASS", "T_CLAY", "T_SILT", "T_SAND", "T_GRAVEL", "T_PH_H2O",
-           "T_TEB", "T_BS", "T_CEC_SOIL", "T_CEC_CLAY", "T_ECE", "T_ESP", "T_CACO3", "T_OC", "ORGC", "TOTN",
-           "CNrt", "ALSA", "PBR", "TP", "TK")
-pred_last <- preds[which(!(preds %in% df_fe_summary$pred))]
-pred_last
-```
+<!-- `df_fe_summary` provides information about the updated R2 after respective variable was dropped. This is a bit misleading as the last dropped variable doesn't appear. -->
+<!-- ```{r} -->
+<!-- preds <- c("elv", "mat", "matgs", "tmonthmin", "tmonthmax", "ndaysgs", "mai", "maigs", "map", "pmonthmin", -->
+<!--            "mapgs", "mavgs", "mav", "alpha", "vcmax25", "jmax25", "gs_accl", "aet", "ai", "cwdx80", "gti", -->
+<!--            "ndep", "co2", "T_BULK_DENSITY", "AWC_CLASS", "T_CLAY", "T_SILT", "T_SAND", "T_GRAVEL", "T_PH_H2O", -->
+<!--            "T_TEB", "T_BS", "T_CEC_SOIL", "T_CEC_CLAY", "T_ECE", "T_ESP", "T_CACO3", "T_OC", "ORGC", "TOTN", -->
+<!--            "CNrt", "ALSA", "PBR", "TP", "TK") -->
+<!-- pred_last <- preds[which(!(preds %in% df_fe_summary$pred))] -->
+<!-- pred_last -->
+<!-- ``` -->
 
-This is because it is the only remaining variable in the last model. 
+<!-- This is because it is the only remaining variable in the last model.  -->
 
-Let's change that so that the column `preds` can be interpreted more clearly.
+<!-- Let's change that so that the column `preds` can be interpreted more clearly. -->
 
-First, `pred = NA` can be interpreted as a model including all predictors.
-```{r}
-df_fe_summary <- df_fe_summary %>% 
-  mutate(pred = ifelse(is.na(pred), "ALL", pred))
-```
+<!-- First, `pred = NA` can be interpreted as a model including all predictors. -->
+<!-- ```{r} -->
+<!-- df_fe_summary <- df_fe_summary %>%  -->
+<!--   mutate(pred = ifelse(is.na(pred), "ALL", pred)) -->
+<!-- ``` -->
 
-Second, the data frame `df_fe_summary` as written by the feature elimination contains information `pred` interpreted as the variable dropped in the respective step. Instead re-define it so that it is to be interpreted as the variable added, relative to the model of the row below. Like this, the bottom row is for `"ndep"` (single variable-model), and the row above that is for `"mai"` where the rsq is given for the model that contains `"ndep + mai"`. The top row is for the model containing all predictors. Interestingly, the highest rsq (based on 5-fold cross-validation!) is achieved 
-```{r}
-df_fe_summary <- df_fe_summary %>% 
-  filter(pred == "ALL") %>% 
-  bind_rows(df_fe_summary %>% 
-              filter(pred != "ALL")) %>% 
-  mutate(pred_new = lead(pred)) %>%
-  mutate(pred_new = ifelse(is.na(pred_new), pred_last, pred_new)) %>% 
-  select(-pred) %>% 
-  rename(pred = pred_new) %>% 
-  mutate(step = rev(1:n())) %>%
-  mutate(pred = fct_reorder(pred, step))
-```
+<!-- Second, the data frame `df_fe_summary` as written by the feature elimination contains information `pred` interpreted as the variable dropped in the respective step. Instead re-define it so that it is to be interpreted as the variable added, relative to the model of the row below. Like this, the bottom row is for `"ndep"` (single variable-model), and the row above that is for `"mai"` where the rsq is given for the model that contains `"ndep + mai"`. The top row is for the model containing all predictors. Interestingly, the highest rsq (based on 5-fold cross-validation!) is achieved  -->
+<!-- ```{r} -->
+<!-- df_fe_summary <- df_fe_summary %>%  -->
+<!--   filter(pred == "ALL") %>%  -->
+<!--   bind_rows(df_fe_summary %>%  -->
+<!--               filter(pred != "ALL")) %>%  -->
+<!--   mutate(pred_new = lead(pred)) %>% -->
+<!--   mutate(pred_new = ifelse(is.na(pred_new), pred_last, pred_new)) %>%  -->
+<!--   select(-pred) %>%  -->
+<!--   rename(pred = pred_new) %>%  -->
+<!--   mutate(step = rev(1:n())) %>% -->
+<!--   mutate(pred = fct_reorder(pred, step)) -->
+<!-- ``` -->
 
 ```{r}
 df_fe_summary %>% 
-  mutate(highlight = ifelse(pred == "vcmax25", "yes", "no")) %>% 
+  mutate(pred = fct_reorder(pred, step)) %>%
+  mutate(highlight = ifelse(pred == "pmonthmin", "yes", "no")) %>% 
   ggplot(aes(pred, rsq, fill = highlight)) +
   scale_fill_manual( values = c( "yes"="tomato", "no"="gray50" ), guide = FALSE ) +
   geom_bar(stat = "identity") +
@@ -675,8 +686,9 @@ df_fe_summary %>%
 ggsave("fig/rsq_stepwise_leafP.pdf", width = 6, height = 6)
 
 gga2 <- df_fe_summary %>% 
-  mutate(highlight = ifelse(pred == "vcmax25", "yes", "no")) %>% 
-  tail(n = 15) %>% 
+  mutate(pred = fct_reorder(pred, step)) %>%
+  mutate(highlight = ifelse(pred == "pmonthmin", "yes", "no")) %>% 
+  tail(n = 11) %>% 
   ggplot(aes(pred, rsq, fill = highlight)) +
   scale_fill_manual( values = c( "yes"="tomato", "no"="gray50" ), guide = FALSE ) +
   geom_bar(stat = "identity") +
@@ -692,10 +704,11 @@ write_csv(df_fe_summary, file = "data/df_fe_summary_leafp.csv")
 This shows that there are negligible gains after `"pmonthmin"`. In other words, we might as well build a model with just the following predictors:
 ```{r}
 longlist <- df_fe_summary %>% 
-  slice((nrow(.)-11):nrow(.)) %>% 
+  slice((nrow(.)-8):nrow(.)) %>% 
   pull(pred) %>% 
   as.character()
 longlist
+saveRDS(longlist, file = paste0("data/longlist_", target, ".rds"))
 ```
 
 ### Train final model
@@ -787,44 +800,45 @@ df_fe <- read_csv(paste0("data/df_fe_", target, ".csv"))
 df_vip <- read_csv(paste0("data/df_vip_", target, ".csv"))
 ```
 
-`df_fe_summary` provides information about the updated R2 after respective variable was dropped. This is a bit misleading as the last dropped variable doesn't appear.
-```{r}
-preds <- c("elv", "mat", "matgs", "tmonthmin", "tmonthmax", "ndaysgs", "mai", "maigs", "map", "pmonthmin",
-           "mapgs", "mavgs", "mav", "alpha", "vcmax25", "jmax25", "gs_accl", "aet", "ai", "cwdx80", "gti",
-           "ndep", "co2", "T_BULK_DENSITY", "AWC_CLASS", "T_CLAY", "T_SILT", "T_SAND", "T_GRAVEL", "T_PH_H2O",
-           "T_TEB", "T_BS", "T_CEC_SOIL", "T_CEC_CLAY", "T_ECE", "T_ESP", "T_CACO3", "T_OC", "ORGC", "TOTN",
-           "CNrt", "ALSA", "PBR", "TP", "TK")
-pred_last <- preds[which(!(preds %in% df_fe_summary$pred))]
-pred_last
-```
+<!-- `df_fe_summary` provides information about the updated R2 after respective variable was dropped. This is a bit misleading as the last dropped variable doesn't appear. -->
+<!-- ```{r} -->
+<!-- preds <- c("elv", "mat", "matgs", "tmonthmin", "tmonthmax", "ndaysgs", "mai", "maigs", "map", "pmonthmin", -->
+<!--            "mapgs", "mavgs", "mav", "alpha", "vcmax25", "jmax25", "gs_accl", "aet", "ai", "cwdx80", "gti", -->
+<!--            "ndep", "co2", "T_BULK_DENSITY", "AWC_CLASS", "T_CLAY", "T_SILT", "T_SAND", "T_GRAVEL", "T_PH_H2O", -->
+<!--            "T_TEB", "T_BS", "T_CEC_SOIL", "T_CEC_CLAY", "T_ECE", "T_ESP", "T_CACO3", "T_OC", "ORGC", "TOTN", -->
+<!--            "CNrt", "ALSA", "PBR", "TP", "TK") -->
+<!-- pred_last <- preds[which(!(preds %in% df_fe_summary$pred))] -->
+<!-- pred_last -->
+<!-- ``` -->
 
-This is because it is the only remaining variable in the last model. 
+<!-- This is because it is the only remaining variable in the last model.  -->
 
-Let's change that so that the column `preds` can be interpreted more clearly.
+<!-- Let's change that so that the column `preds` can be interpreted more clearly. -->
 
-First, `pred = NA` can be interpreted as a model including all predictors.
-```{r}
-df_fe_summary <- df_fe_summary %>% 
-  mutate(pred = ifelse(is.na(pred), "ALL", pred))
-```
+<!-- First, `pred = NA` can be interpreted as a model including all predictors. -->
+<!-- ```{r} -->
+<!-- df_fe_summary <- df_fe_summary %>%  -->
+<!--   mutate(pred = ifelse(is.na(pred), "ALL", pred)) -->
+<!-- ``` -->
 
-Second, the data frame `df_fe_summary` as written by the feature elimination contains information `pred` interpreted as the variable dropped in the respective step. Instead re-define it so that it is to be interpreted as the variable added, relative to the model of the row below. Like this, the bottom row is for `"ndep"` (single variable-model), and the row above that is for `"mai"` where the rsq is given for the model that contains `"ndep + mai"`. The top row is for the model containing all predictors. Interestingly, the highest rsq (based on 5-fold cross-validation!) is achieved 
-```{r}
-df_fe_summary <- df_fe_summary %>% 
-  filter(pred == "ALL") %>% 
-  bind_rows(df_fe_summary %>% 
-              filter(pred != "ALL")) %>% 
-  mutate(pred_new = lead(pred)) %>%
-  mutate(pred_new = ifelse(is.na(pred_new), pred_last, pred_new)) %>% 
-  select(-pred) %>% 
-  rename(pred = pred_new) %>% 
-  mutate(step = rev(1:n())) %>%
-  mutate(pred = fct_reorder(pred, step))
-```
+<!-- Second, the data frame `df_fe_summary` as written by the feature elimination contains information `pred` interpreted as the variable dropped in the respective step. Instead re-define it so that it is to be interpreted as the variable added, relative to the model of the row below. Like this, the bottom row is for `"ndep"` (single variable-model), and the row above that is for `"mai"` where the rsq is given for the model that contains `"ndep + mai"`. The top row is for the model containing all predictors. Interestingly, the highest rsq (based on 5-fold cross-validation!) is achieved  -->
+<!-- ```{r} -->
+<!-- df_fe_summary <- df_fe_summary %>%  -->
+<!--   filter(pred == "ALL") %>%  -->
+<!--   bind_rows(df_fe_summary %>%  -->
+<!--               filter(pred != "ALL")) %>%  -->
+<!--   mutate(pred_new = lead(pred)) %>% -->
+<!--   mutate(pred_new = ifelse(is.na(pred_new), pred_last, pred_new)) %>%  -->
+<!--   select(-pred) %>%  -->
+<!--   rename(pred = pred_new) %>%  -->
+<!--   mutate(step = rev(1:n())) %>% -->
+<!--   mutate(pred = fct_reorder(pred, step)) -->
+<!-- ``` -->
 
 
 ```{r}
 df_fe_summary %>% 
+  mutate(pred = fct_reorder(pred, step)) %>%
   mutate(highlight = ifelse(pred == "jmax25", "yes", "no")) %>% 
   ggplot(aes(pred, rsq, fill = highlight)) +
   scale_fill_manual( values = c( "yes"="tomato", "no"="gray50" ), guide = FALSE ) +
@@ -835,8 +849,9 @@ df_fe_summary %>%
 ggsave("fig/rsq_stepwise_leafNP.pdf", width = 6, height = 6)
 
 gga3 <- df_fe_summary %>% 
+  mutate(pred = fct_reorder(pred, step)) %>%
   mutate(highlight = ifelse(pred == "map", "yes", "no")) %>% 
-  tail(n = 12) %>% 
+  tail(n = 11) %>% 
   ggplot(aes(pred, rsq, fill = highlight)) +
   scale_fill_manual( values = c( "yes"="tomato", "no"="gray50" ), guide = FALSE ) +
   geom_bar(stat = "identity") +
@@ -855,6 +870,7 @@ longlist <- df_fe_summary %>%
   pull(pred) %>% 
   as.character()
 longlist
+saveRDS(longlist, file = paste0("data/longlist_", target, ".rds"))
 ```
 
 ### Train final model
