@@ -21,7 +21,7 @@ library(cowplot)
 
 library(bestNormalize)
 library(metafor)
-library(nlme)
+# library(nlme)
 library(lme4)
 library(lmerTest)
 library(effects)
@@ -989,6 +989,16 @@ df_model_fitting <- df_model_fitting %>%
 ```
 
 ## Visualisation
+
+Explanation:
+
+For the data aggregated to site-level (a, c, d), the R2 represents the coefficient of determination on a multivariate linear regression model (LM), and the mean across a 5-fold cross validation for the RF. Only environmental factors are considered as model predictors. 
+
+For the non-aggregated, species-level data, The top edge of the bar represents the conditional R-squared for the linear mixed effects models (LMM) and the mean across a 5-fold cross validation for the RF, using environmental and phylogenetic variables as predictors. Species identity is considered as the grouping variable for random intercepts in the LMM and is considered as a one-hot encoded predictor in the RF. The "phylogenetic" portion (brown bar) visualises the the intraclass correlation coefficient (ICC) for the LMMs, determined on the same model and representing the proportion of the variance explained by species identity. For the RF models, the "phylogenetic" pportion of the bar represents the R-quared (mean across 5-fold cross validation) of a model that contains only species, genus, and family identity (one-hot encoded) as predictors.
+
+
+
+
 
 ```{r}
 # N
