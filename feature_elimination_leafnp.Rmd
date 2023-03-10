@@ -112,7 +112,7 @@ df_fe_summary %>%
   coord_flip() +
   theme_classic()
 
-ggsave("fig/rsq_stepwise_leafN.pdf", width = 6, height = 6)
+ggsave("fig/rsq_stepwise_leafN.pdf", width = 6, height = 8)
 
 gga1 <- df_fe_summary %>% 
   mutate(highlight = ifelse(pred == "ALSA", "yes", "no")) %>% 
@@ -126,7 +126,8 @@ gga1 <- df_fe_summary %>%
   theme_classic()
 
 gga1
-ggsave("fig/rsq_stepwise_leafN_sub.pdf", width = 6, height = 6)
+
+ggsave("fig/rsq_stepwise_leafN_sub.pdf", width = 6, height = 4)
 write_csv(df_fe_summary, file = "data/df_fe_summary_leafn.csv")
 ```
 
@@ -683,7 +684,7 @@ df_fe_summary %>%
   labs(x = "", y = expression(italic(R)^2)) +
   coord_flip() +
   theme_classic()
-ggsave("fig/rsq_stepwise_leafP.pdf", width = 6, height = 6)
+ggsave("fig/rsq_stepwise_leafP.pdf", width = 6, height = 8)
 
 gga2 <- df_fe_summary %>% 
   mutate(pred = fct_reorder(pred, step)) %>%
@@ -696,7 +697,7 @@ gga2 <- df_fe_summary %>%
   coord_flip() +
   theme_classic()
 gga2
-ggsave("fig/rsq_stepwise_leafP_sub.pdf", width = 6, height = 6)
+ggsave("fig/rsq_stepwise_leafP_sub.pdf", width = 6, height = 4)
 write_csv(df_fe_summary, file = "data/df_fe_summary_leafp.csv")
 ```
 
