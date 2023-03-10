@@ -269,7 +269,7 @@ write_csv(df_my, file = "~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/leafnp_da
 
 <!-- ### Extracting from global NetCDF files -->
 
-<!-- This is a code example and is to be used for extracting AI, alpha, and CWDX40 (see [here](https://www.notion.so/computationales/4e2e0ca6b5d3497894c64bed71a4937d?v=0ee5d81cd0fe42ac8ac1ed0a938b3380)). -->
+<!-- This is a code example and is to be used for extracting AI, alpha, and CWDX40 (see [here](https://www.notion.so/geco-bern/4e2e0ca6b5d3497894c64bed71a4937d?v=0ee5d81cd0fe42ac8ac1ed0a938b3380)). -->
 
 <!-- Use the following files: -->
 
