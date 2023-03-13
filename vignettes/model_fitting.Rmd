@@ -241,7 +241,8 @@ if (file.exists(filn) && !overwrite){
   
   ## one-hot encoding for Species identity (warning: 3700 species)
   df1h_phylo <- df %>% 
-    recipe(leafN ~ ., data = dplyr::select(df, leafN, all_of(c("Species", "Family_New", "Genus")))) %>% 
+    recipe(leafN ~ ., 
+           data = dplyr::select(df, leafN, all_of(c("Species", "Family_New", "Genus")))) %>% 
     step_dummy(Species, one_hot = TRUE) %>% 
     step_dummy(Family_New, one_hot = TRUE) %>% 
     step_dummy(Genus, one_hot = TRUE) %>% 
@@ -313,7 +314,8 @@ mod_lmm_leafn <- lme(
 
   as.formula(paste("log(", target,") ~ ", paste(shortlist, collapse = " + "))),
   random = ~1|SP,
-  data = dplyr::select(df_lmm, leafP, all_of(c(shortlist, "SP"))) %>% drop_na()
+  data = dplyr::select(df_lmm, leafP, all_of(c(shortlist, "SP"))) %>% 
+    drop_na()
 
   )
 
@@ -359,7 +361,8 @@ if (file.exists(filn) && !overwrite){
   
   ## one-hot encoding for Species identity (warning: 3700 species)
   df1h <- df %>% 
-    recipe(leafP ~ ., data = dplyr::select(df, leafP, all_of(c(longlist, "Species", "Family_New", "Genus")))) %>% 
+    recipe(leafP ~ ., 
+           data = dplyr::select(df, leafP, all_of(c(longlist, "Species", "Family_New", "Genus")))) %>% 
     step_dummy(Species, one_hot = TRUE) %>% 
     step_dummy(Family_New, one_hot = TRUE) %>% 
     step_dummy(Genus, one_hot = TRUE) %>% 

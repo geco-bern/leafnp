@@ -61,6 +61,7 @@ all_equal(df_fe_summary, df_fe_summary_reconstr)
 ```{r}
 df_fe_summary %>% 
   mutate(highlight = ifelse(pred == "pmonthmin", "yes", "no")) %>% 
+  mutate(step = rev(1:n())) %>%
   mutate(pred = fct_reorder(pred, step)) %>%
   ggplot(aes(pred, rsq, fill = highlight)) +
   scale_fill_manual( values = c( "yes"="tomato", "no"="gray50" ), guide = FALSE ) +
@@ -73,6 +74,7 @@ ggsave(paste0(here::here(), "/fig/rsq_stepwise_leafN.pdf"), width = 6, height = 
 
 gga1 <- df_fe_summary %>% 
   mutate(highlight = ifelse(pred == "pmonthmin", "yes", "no")) %>% 
+  mutate(step = rev(1:n())) %>%
   mutate(pred = fct_reorder(pred, step)) %>%
   tail(n = 13) %>% 
   ggplot(aes(pred, rsq, fill = highlight)) +
