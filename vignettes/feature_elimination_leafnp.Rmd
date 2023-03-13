@@ -27,7 +27,7 @@ Obtain outputs from Euler, generated with `feature_elimination_leafnp.R`. Downlo
 
 Load data aggregated to sites, done in `randomforest_leafnp.Rmd`.
 ```{r}
-dfs <- readRDS("data/dfs_leafnp_20210729.rds")
+dfs <- readRDS(paste0(here::here(), "/data/dfs_leafnp_20210729.rds"))
 ```
 
 ## Leaf N
@@ -36,9 +36,9 @@ dfs <- readRDS("data/dfs_leafnp_20210729.rds")
 
 ```{r}
 target <- "leafN"
-df_fe_summary <- read_csv(paste0("data/df_fe_summary_", target, ".csv"))
-df_fe <- read_csv(paste0("data/df_fe_", target, ".csv"))
-df_vip <- read_csv(paste0("data/df_vip_", target, ".csv"))
+df_fe_summary <- read_csv(paste0(here::here(), "/data/df_fe_summary_", target, ".csv"))
+df_fe <- read_csv(paste0(here::here(), "/data/df_fe_", target, ".csv"))
+df_vip <- read_csv(paste0(here::here(), "/data/df_vip_", target, ".csv"))
 ```
 
 `df_fe` provides the full information about the updated R2 after respective variable was dropped.
@@ -60,50 +60,7 @@ all_equal(df_fe_summary, df_fe_summary_reconstr)
 
 ```{r}
 df_fe_summary %>% 
-  mutate(step = rev(1:n())) %>% 
-  mutate(pred = fct_reorder(pred, step)) %>%
-  ggplot(aes(pred, rsq)) +
-  geom_bar(stat = "identity") +
-  coord_flip()
-```
-
-<!-- This is a bit misleading as `"ndep"` doesn't appear. -->
-<!-- ```{r} -->
-<!-- preds <- c("elv", "mat", "matgs", "tmonthmin", "tmonthmax", "ndaysgs", "mai", "maigs", "map", "pmonthmin", -->
-<!--            "mapgs", "mavgs", "mav", "alpha", "vcmax25", "jmax25", "gs_accl", "aet", "ai", "cwdx80", "gti", -->
-<!--            "ndep", "co2", "T_BULK_DENSITY", "AWC_CLASS", "T_CLAY", "T_SILT", "T_SAND", "T_GRAVEL", "T_PH_H2O", -->
-<!--            "T_TEB", "T_BS", "T_CEC_SOIL", "T_CEC_CLAY", "T_ECE", "T_ESP", "T_CACO3", "T_OC", "ORGC", "TOTN", -->
-<!--            "CNrt", "ALSA", "PBR", "TP", "TK") -->
-<!-- preds[which(!(preds %in% df_fe_summary$pred))] -->
-<!-- ``` -->
-
-<!-- This is because it is the only remaining variable in the last model.  -->
-
-<!-- Let's change that so that the column `preds` can be interpreted more clearly. -->
-
-<!-- First, `pred = NA` can be interpreted as a model including all predictors. -->
-<!-- ```{r} -->
-<!-- df_fe_summary <- df_fe_summary %>%  -->
-<!--   mutate(pred = ifelse(is.na(pred), "ALL", pred)) -->
-<!-- ``` -->
-
-<!-- Second, the data frame `df_fe_summary` as written by the feature elimination contains information `pred` interpreted as the variable dropped in the respective step. Instead re-define it so that it is to be interpreted as the *variable added*, relative to the model of the row below. Like this, the bottom row is for `"ndep"` (single variable-model), and the row above that is for `"mai"` where the rsq is given for the model that contains `"ndep + mai"`. The top row is for the model containing all predictors. Interestingly, the highest rsq (based on 5-fold cross-validation!) is achieved  -->
-<!-- ```{r} -->
-<!-- df_fe_summary <- df_fe_summary %>%  -->
-<!--   filter(pred == "ALL") %>%  -->
-<!--   bind_rows(df_fe_summary %>%  -->
-<!--               filter(pred != "ALL")) %>%  -->
-<!--   mutate(pred_new = lead(pred)) %>% -->
-<!--   mutate(pred_new = ifelse(is.na(pred_new), "ndep", pred_new)) %>%  -->
-<!--   select(-pred) %>%  -->
-<!--   rename(pred = pred_new) %>%  -->
-<!--   mutate(step = rev(1:n())) %>% -->
-<!--   mutate(pred = fct_reorder(pred, step)) -->
-<!-- ``` -->
-
-```{r}
-df_fe_summary %>% 
-  mutate(highlight = ifelse(pred == "ALSA", "yes", "no")) %>% 
+  mutate(highlight = ifelse(pred == "pmonthmin", "yes", "no")) %>% 
   mutate(pred = fct_reorder(pred, step)) %>%
   ggplot(aes(pred, rsq, fill = highlight)) +
   scale_fill_manual( values = c( "yes"="tomato", "no"="gray50" ), guide = FALSE ) +
@@ -112,14 +69,14 @@ df_fe_summary %>%
   coord_flip() +
   theme_classic()
 
-ggsave("fig/rsq_stepwise_leafN.pdf", width = 6, height = 8)
+ggsave(paste0(here::here(), "/fig/rsq_stepwise_leafN.pdf"), width = 6, height = 8)
 
 gga1 <- df_fe_summary %>% 
-  mutate(highlight = ifelse(pred == "ALSA", "yes", "no")) %>% 
+  mutate(highlight = ifelse(pred == "pmonthmin", "yes", "no")) %>% 
   mutate(pred = fct_reorder(pred, step)) %>%
-  tail(n = 10) %>% 
+  tail(n = 13) %>% 
   ggplot(aes(pred, rsq, fill = highlight)) +
-  scale_fill_manual( values = c( "yes"="tomato", "no"="gray50" ), guide = FALSE ) +
+  scale_fill_manual(values = c( "yes"="tomato", "no"="gray50" ), guide = FALSE ) +
   geom_bar(stat = "identity") +
   labs(x = "", y = expression(italic(R)^2)) +
   coord_flip() +
@@ -127,33 +84,33 @@ gga1 <- df_fe_summary %>%
 
 gga1
 
-ggsave("fig/rsq_stepwise_leafN_sub.pdf", width = 6, height = 4)
-write_csv(df_fe_summary, file = "data/df_fe_summary_leafn.csv")
+ggsave(paste0(here::here(), "/fig/rsq_stepwise_leafN_sub.pdf"), width = 6, height = 4)
+write_csv(df_fe_summary, file = paste0(here::here(), "/data/df_fe_summary_leafn.csv"))
 ```
 
 This shows that there are negligible gains after ALSA (more generously after cwdx80). In other words, we might as well build a model with just the following predictors:
 ```{r}
 longlist <- df_fe_summary %>% 
-  slice((nrow(.)-8):nrow(.)) %>% 
+  slice((nrow(.)-11):nrow(.)) %>% 
   pull(pred) %>% 
   as.character()
 longlist
 
 shortlist <- df_fe_summary %>% 
-  slice((nrow(.)-6):nrow(.)) %>% 
+  slice((nrow(.)-8):nrow(.)) %>% 
   pull(pred) %>% 
   as.character()
 shortlist
 
-saveRDS(shortlist, file = paste0("data/shortlist_", target, ".rds"))
-saveRDS(longlist, file = paste0("data/longlist_", target, ".rds"))
+saveRDS(shortlist, file = paste0(here::here(), "/data/shortlist_", target, ".rds"))
+saveRDS(longlist, file = paste0(here::here(), "/data/longlist_", target, ".rds"))
 ```
 
 ### Train final model
 
 With just these (`longlist`), fit again a RF model.
-```{r}
-filn <- "data/mod_rf_caret_leafn.rds"
+```{r eval=FALSE}
+filn <- paste0(here::here(), "/data/mod_rf_caret_leafn.rds")
 overwrite <- FALSE
 
 if (file.exists(filn) && !overwrite){
@@ -207,7 +164,7 @@ if (file.exists(filn) && !overwrite){
 
 Visualise cross-validation results using results from the best tuned model.
 ```{r}
-mod_rf_caret_leafn <- readRDS("data/mod_rf_caret_leafn.rds")
+mod_rf_caret_leafn <- readRDS(paste0(here::here(), "/data/mod_rf_caret_leafn.rds"))
 
 ## get predicted values from cross-validation resamples, take mean across repetitions
 df_cv <- mod_rf_caret_leafn$pred %>% 
@@ -224,8 +181,8 @@ gg1 <- out$gg +
   ylim(5,40) + xlim(5,40) +
   labs(x = "Predicted leaf N (mg/g)", y = "Observed leaf N (mg/g)")
 gg1
-saveRDS(gg1, file = "data/gg1.rds")
-write_csv(df_cv, file = "data/df_cv_leafn.csv")
+saveRDS(gg1, file = paste0(here::here(), "/data/gg1.rds"))
+write_csv(df_cv, file = paste0(here::here(), "/data/df_cv_leafn.csv"))
 ```
 
 
@@ -236,7 +193,7 @@ Read full species-level data
 # df <- read_csv("~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/soil_property_extraction_20210323/global_leaf_NP_with_soil_property_from_HWSD_WISE_GSDE_Pmodel_Ndep_GTI_CO2_25032021.csv") %>% 
 #   mutate(grass = tree_shrub_Herb == "H") 
 
-df <- read_csv("~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/leafnp_data_covariates_20210702.csv") %>% 
+df <- read_csv(paste0(here::here(), "~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/leafnp_data_covariates_20210702.csv")) %>% 
   mutate(grass = tree_shrub_Herb == "H")
 ```
 
@@ -257,8 +214,8 @@ df <- df %>%
 
 ### Train full model
 
-```{r}
-filn <- "data/mod_rf_caret_leafn_species.rds"
+```{r eval=FALSE}
+filn <- paste0(here::here(), "/data/mod_rf_caret_leafn_species.rds")
 
 if (file.exists(filn) && !overwrite){
   
@@ -320,7 +277,7 @@ if (file.exists(filn) && !overwrite){
 ### Train model based on phylogenetic info
 
 ```{r}
-filn <- "data/mod_rf_caret_leafn_species_phylo.rds"
+filn <- paste0(here::here(), "/data/mod_rf_caret_leafn_species_phylo.rds")
 
 if (file.exists(filn) && !overwrite){
   
@@ -377,7 +334,7 @@ if (file.exists(filn) && !overwrite){
 ### Train model based on environment info
 
 ```{r}
-filn <- "data/mod_rf_caret_leafn_species_env.rds"
+filn <- paste0(here::here(), "/data/mod_rf_caret_leafn_species_env.rds")
 
 if (file.exists(filn) && !overwrite){
   
@@ -431,7 +388,7 @@ if (file.exists(filn) && !overwrite){
 
 Visualise cross-validation results using results from the best tuned model.
 ```{r}
-mod_rf_caret_leafn <- readRDS("data/mod_rf_caret_leafn.rds")
+mod_rf_caret_leafn <- readRDS(paste0(here::here(), "/data/mod_rf_caret_leafn.rds"))
 
 ## get predicted values from cross-validation resamples, take mean across repetitions
 df_cv <- mod_rf_caret_leafn$pred %>% 
@@ -634,45 +591,10 @@ partial(
 
 ```{r}
 target <- "leafP"
-df_fe_summary <- read_csv(paste0("data/df_fe_summary_", target, ".csv"))
-df_fe <- read_csv(paste0("data/df_fe_", target, ".csv"))
-df_vip <- read_csv(paste0("data/df_vip_", target, ".csv"))
+df_fe_summary <- read_csv(paste0(here::here(), "/data/df_fe_summary_", target, ".csv"))
+df_fe <- read_csv(paste0(here::here(), "/data/df_fe_", target, ".csv"))
+df_vip <- read_csv(paste0(here::here(), "/data/df_vip_", target, ".csv"))
 ```
-
-<!-- `df_fe_summary` provides information about the updated R2 after respective variable was dropped. This is a bit misleading as the last dropped variable doesn't appear. -->
-<!-- ```{r} -->
-<!-- preds <- c("elv", "mat", "matgs", "tmonthmin", "tmonthmax", "ndaysgs", "mai", "maigs", "map", "pmonthmin", -->
-<!--            "mapgs", "mavgs", "mav", "alpha", "vcmax25", "jmax25", "gs_accl", "aet", "ai", "cwdx80", "gti", -->
-<!--            "ndep", "co2", "T_BULK_DENSITY", "AWC_CLASS", "T_CLAY", "T_SILT", "T_SAND", "T_GRAVEL", "T_PH_H2O", -->
-<!--            "T_TEB", "T_BS", "T_CEC_SOIL", "T_CEC_CLAY", "T_ECE", "T_ESP", "T_CACO3", "T_OC", "ORGC", "TOTN", -->
-<!--            "CNrt", "ALSA", "PBR", "TP", "TK") -->
-<!-- pred_last <- preds[which(!(preds %in% df_fe_summary$pred))] -->
-<!-- pred_last -->
-<!-- ``` -->
-
-<!-- This is because it is the only remaining variable in the last model.  -->
-
-<!-- Let's change that so that the column `preds` can be interpreted more clearly. -->
-
-<!-- First, `pred = NA` can be interpreted as a model including all predictors. -->
-<!-- ```{r} -->
-<!-- df_fe_summary <- df_fe_summary %>%  -->
-<!--   mutate(pred = ifelse(is.na(pred), "ALL", pred)) -->
-<!-- ``` -->
-
-<!-- Second, the data frame `df_fe_summary` as written by the feature elimination contains information `pred` interpreted as the variable dropped in the respective step. Instead re-define it so that it is to be interpreted as the variable added, relative to the model of the row below. Like this, the bottom row is for `"ndep"` (single variable-model), and the row above that is for `"mai"` where the rsq is given for the model that contains `"ndep + mai"`. The top row is for the model containing all predictors. Interestingly, the highest rsq (based on 5-fold cross-validation!) is achieved  -->
-<!-- ```{r} -->
-<!-- df_fe_summary <- df_fe_summary %>%  -->
-<!--   filter(pred == "ALL") %>%  -->
-<!--   bind_rows(df_fe_summary %>%  -->
-<!--               filter(pred != "ALL")) %>%  -->
-<!--   mutate(pred_new = lead(pred)) %>% -->
-<!--   mutate(pred_new = ifelse(is.na(pred_new), pred_last, pred_new)) %>%  -->
-<!--   select(-pred) %>%  -->
-<!--   rename(pred = pred_new) %>%  -->
-<!--   mutate(step = rev(1:n())) %>% -->
-<!--   mutate(pred = fct_reorder(pred, step)) -->
-<!-- ``` -->
 
 ```{r}
 df_fe_summary %>% 
@@ -684,39 +606,48 @@ df_fe_summary %>%
   labs(x = "", y = expression(italic(R)^2)) +
   coord_flip() +
   theme_classic()
-ggsave("fig/rsq_stepwise_leafP.pdf", width = 6, height = 8)
+
+ggsave(paste0(here::here(), "/fig/rsq_stepwise_leafP.pdf"), width = 6, height = 8)
 
 gga2 <- df_fe_summary %>% 
   mutate(pred = fct_reorder(pred, step)) %>%
   mutate(highlight = ifelse(pred == "pmonthmin", "yes", "no")) %>% 
-  tail(n = 11) %>% 
+  tail(n = 13) %>% 
   ggplot(aes(pred, rsq, fill = highlight)) +
   scale_fill_manual( values = c( "yes"="tomato", "no"="gray50" ), guide = FALSE ) +
   geom_bar(stat = "identity") +
   labs(x = "", y = expression(italic(R)^2)) +
   coord_flip() +
   theme_classic()
+
 gga2
-ggsave("fig/rsq_stepwise_leafP_sub.pdf", width = 6, height = 4)
-write_csv(df_fe_summary, file = "data/df_fe_summary_leafp.csv")
+ggsave(paste0(here::here(), "/fig/rsq_stepwise_leafP_sub.pdf"), width = 6, height = 4)
+write_csv(df_fe_summary, file = paste0(here::here(), "/data/df_fe_summary_leafp.csv"))
 ```
 
 
 This shows that there are negligible gains after `"pmonthmin"`. In other words, we might as well build a model with just the following predictors:
 ```{r}
 longlist <- df_fe_summary %>% 
-  slice((nrow(.)-8):nrow(.)) %>% 
+  slice((nrow(.)-11):nrow(.)) %>% 
   pull(pred) %>% 
   as.character()
 longlist
-saveRDS(longlist, file = paste0("data/longlist_", target, ".rds"))
+saveRDS(longlist, file = paste0(here::here(), "/data/longlist_", target, ".rds"))
+
+shortlist <- df_fe_summary %>% 
+  slice((nrow(.)-8):nrow(.)) %>% 
+  pull(pred) %>% 
+  as.character()
+shortlist
+saveRDS(shortlist, file = paste0(here::here(), "/data/shortlist_", target, ".rds"))
 ```
 
 ### Train final model
 
 With just these (`longlist`), fit again a RF model.
 ```{r}
-filn <- "data/mod_rf_caret_leafp.rds"
+filn <- paste0(here::here(), "/data/mod_rf_caret_leafp.rds")
 overwrite <- TRUE
 
 if (file.exists(filn) && !overwrite){
@@ -787,7 +718,7 @@ gg2 <- out$gg +
   ylim(0, 5) + xlim(0, 5) +
   labs(x = "Predicted leaf P (mg/g)", y = "Observed leaf P (mg/g)")
 gg2
-write_csv(df_cv, file = "data/df_cv_leafp.csv")
+write_csv(df_cv, file = paste0(here::here(), "/data/df_cv_leafp.csv"))
 ```
 
 ## Leaf N:P
@@ -796,72 +727,39 @@ write_csv(df_cv, file = "data/df_cv_leafp.csv")
 
 ```{r}
 target <- "LeafNP"
-df_fe_summary <- read_csv(paste0("data/df_fe_summary_", target, ".csv"))
-df_fe <- read_csv(paste0("data/df_fe_", target, ".csv"))
-df_vip <- read_csv(paste0("data/df_vip_", target, ".csv"))
+df_fe_summary <- read_csv(paste0(here::here(), "/data/df_fe_summary_", target, ".csv"))
+df_fe <- read_csv(paste0(here::here(), "/data/df_fe_", target, ".csv"))
+df_vip <- read_csv(paste0(here::here(), "/data/df_vip_", target, ".csv"))
 ```
-
-<!-- `df_fe_summary` provides information about the updated R2 after respective variable was dropped. This is a bit misleading as the last dropped variable doesn't appear. -->
-<!-- ```{r} -->
-<!-- preds <- c("elv", "mat", "matgs", "tmonthmin", "tmonthmax", "ndaysgs", "mai", "maigs", "map", "pmonthmin", -->
-<!--            "mapgs", "mavgs", "mav", "alpha", "vcmax25", "jmax25", "gs_accl", "aet", "ai", "cwdx80", "gti", -->
-<!--            "ndep", "co2", "T_BULK_DENSITY", "AWC_CLASS", "T_CLAY", "T_SILT", "T_SAND", "T_GRAVEL", "T_PH_H2O", -->
-<!--            "T_TEB", "T_BS", "T_CEC_SOIL", "T_CEC_CLAY", "T_ECE", "T_ESP", "T_CACO3", "T_OC", "ORGC", "TOTN", -->
-<!--            "CNrt", "ALSA", "PBR", "TP", "TK") -->
-<!-- pred_last <- preds[which(!(preds %in% df_fe_summary$pred))] -->
-<!-- pred_last -->
-<!-- ``` -->
-
-<!-- This is because it is the only remaining variable in the last model.  -->
-
-<!-- Let's change that so that the column `preds` can be interpreted more clearly. -->
-
-<!-- First, `pred = NA` can be interpreted as a model including all predictors. -->
-<!-- ```{r} -->
-<!-- df_fe_summary <- df_fe_summary %>%  -->
-<!--   mutate(pred = ifelse(is.na(pred), "ALL", pred)) -->
-<!-- ``` -->
-
-<!-- Second, the data frame `df_fe_summary` as written by the feature elimination contains information `pred` interpreted as the variable dropped in the respective step. Instead re-define it so that it is to be interpreted as the variable added, relative to the model of the row below. Like this, the bottom row is for `"ndep"` (single variable-model), and the row above that is for `"mai"` where the rsq is given for the model that contains `"ndep + mai"`. The top row is for the model containing all predictors. Interestingly, the highest rsq (based on 5-fold cross-validation!) is achieved  -->
-<!-- ```{r} -->
-<!-- df_fe_summary <- df_fe_summary %>%  -->
-<!--   filter(pred == "ALL") %>%  -->
-<!--   bind_rows(df_fe_summary %>%  -->
-<!--               filter(pred != "ALL")) %>%  -->
-<!--   mutate(pred_new = lead(pred)) %>% -->
-<!--   mutate(pred_new = ifelse(is.na(pred_new), pred_last, pred_new)) %>%  -->
-<!--   select(-pred) %>%  -->
-<!--   rename(pred = pred_new) %>%  -->
-<!--   mutate(step = rev(1:n())) %>% -->
-<!--   mutate(pred = fct_reorder(pred, step)) -->
-<!-- ``` -->
 
 
 ```{r}
 df_fe_summary %>% 
   mutate(pred = fct_reorder(pred, step)) %>%
-  mutate(highlight = ifelse(pred == "jmax25", "yes", "no")) %>% 
+  mutate(highlight = ifelse(pred == "map", "yes", "no")) %>% 
   ggplot(aes(pred, rsq, fill = highlight)) +
   scale_fill_manual( values = c( "yes"="tomato", "no"="gray50" ), guide = FALSE ) +
   geom_bar(stat = "identity") +
   labs(x = "", y = expression(italic(R)^2)) +
   coord_flip() +
   theme_classic()
-ggsave("fig/rsq_stepwise_leafNP.pdf", width = 6, height = 6)
+
+ggsave(paste0(here::here(), "/fig/rsq_stepwise_leafNP.pdf"), width = 6, height = 8)
 
 gga3 <- df_fe_summary %>% 
   mutate(pred = fct_reorder(pred, step)) %>%
   mutate(highlight = ifelse(pred == "map", "yes", "no")) %>% 
-  tail(n = 11) %>% 
+  tail(n = 13) %>% 
   ggplot(aes(pred, rsq, fill = highlight)) +
   scale_fill_manual( values = c( "yes"="tomato", "no"="gray50" ), guide = FALSE ) +
   geom_bar(stat = "identity") +
   labs(x = "", y = expression(italic(R)^2)) +
   coord_flip() +
   theme_classic()
+
 gga3
-ggsave("fig/rsq_stepwise_leafNP_sub.pdf", width = 6, height = 6)
-write_csv(df_fe_summary, file = "data/df_fe_summary_leafnp.csv")
+ggsave(paste0(here::here(), "/fig/rsq_stepwise_leafNP_sub.pdf"), width = 6, height = 4)
+write_csv(df_fe_summary, file = paste0(here::here(), "/data/df_fe_summary_leafnp.csv"))
 ```
 
 This shows that there are negligible gains after `"cwdx80"`. In other words, we might as well build a model with just the following predictors:
@@ -871,7 +769,7 @@ longlist <- df_fe_summary %>%
   pull(pred) %>% 
   as.character()
 longlist
-saveRDS(longlist, file = paste0("data/longlist_", target, ".rds"))
+saveRDS(longlist, file = paste0(here::here(), "/data/longlist_", target, ".rds"))
 ```
 
 ### Train final model
@@ -884,7 +782,7 @@ dfs_sub <- dfs %>%
 
 With just these (`longlist`), fit again a RF model.
 ```{r}
-filn <- "data/mod_rf_caret_leafnp.rds"
+filn <- paste0(here::here(), "/data/mod_rf_caret_leafnp.rds")
 overwrite <- TRUE
 
 if (file.exists(filn) && !overwrite){
@@ -952,17 +850,17 @@ gg3 <- out$gg +
   ylim(0, 30) + xlim(0, 30) +
   labs(x = "Predicted leaf N:P", y = "Observed leaf N:P")
 gg3
-write_csv(df_cv, file = "data/df_cv_leafnp.csv")
+write_csv(df_cv, file = paste0(here::here(), "/data/df_cv_leafnp.csv"))
 ```
 
 # Publication figures
 
 ```{r}
 library(cowplot)
-gg1 <- readRDS("data/gg1.rds")
+gg1 <- readRDS(paste0(here::here(), "/data/gg1.rds"))
 plot_grid(gg1, gg2, gg3, labels =  c("a", "b", "c"), ncol = 3)
-ggsave("fig/modobs_all.pdf", width = 12, height = 4)
+ggsave(paste0(here::here(), "/fig/modobs_all.pdf"), width = 12, height = 4)
 
 plot_grid(gga1, gga2, gga3, labels =  c("a", "b", "c"), ncol = 3)
-ggsave("fig/fe_all.pdf", width = 12, height = 4)
+ggsave(paste0(here::here(), "/fig/fe_all.pdf"), width = 12, height = 4)
 ```
