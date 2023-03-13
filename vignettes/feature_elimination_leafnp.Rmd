@@ -772,6 +772,13 @@ longlist <- df_fe_summary %>%
   as.character()
 longlist
 saveRDS(longlist, file = paste0(here::here(), "/data/longlist_", target, ".rds"))
+
+shortlist <- df_fe_summary %>% 
+  slice((nrow(.)-8):nrow(.)) %>% 
+  pull(pred) %>% 
+  as.character()
+shortlist
+saveRDS(shortlist, file = paste0(here::here(), "/data/shortlist_", target, ".rds"))
 ```
 
 ### Train final model
