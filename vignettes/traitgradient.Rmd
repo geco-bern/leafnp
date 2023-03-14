@@ -7,12 +7,16 @@ output: html_document
 
 ```{r setup, include=FALSE}
 library(tidyverse)
+library(RColorBrewer)
 ```
 
 ## Prepare data
 ```{r}
 df <- read_csv("~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/leafnp_data_covariates_20210702.csv") %>% 
-  dplyr::select(leafN, leafP, LeafNP, Family, Genus, Species, sitename)
+  dplyr::select(leafN, leafP, LeafNP, Family, Genus, Species, sitename) |> 
+  
+  # correct
+  mutate(Family = ifelse(Species == "Acer saccharum", "Sapindaceae", Family))
 ```
 
 Add site-mean to full data.
@@ -33,6 +37,15 @@ df <- df %>%
          )
 ```
 
+Determine most common species (for plotting) with more than 50 observations
+```{r}
+# determine most common species
+common_species <- df |> 
+  group_by(Species) |> 
+  summarise(n = n()) |> 
+  filter(n >= 50) |> 
+  pull(Species)
+```
 
 ## Filter data
 
@@ -144,25 +157,25 @@ df %>%
   dplyr::filter(Species %in% use_species & sitename %in% use_sites) %>% 
   group_by(Species) %>% 
   ggplot(aes(x = log_leafN_sitemean, y = log_leafN, group = Species)) +
-  geom_smooth(method = "lm", se = FALSE, size = 0.2, alpha = 0.2, colour = "royalblue3") +
+  geom_smooth(method = "lm", se = FALSE, size = 0.1, alpha = 0.2, colour = "royalblue3") +
   geom_abline(intercept=0, slope=1, linetype="dotted") +
   theme_classic() +
   coord_equal() + 
   labs(x = expression(paste("log"[10], "(site mean leaf N)")), y = expression(paste("log"[10], "(species-level leaf N)")), title = "Leaf N")
   # geom_point(alpha = 0.3)
-ggsave("fig/tga_leafn_log.pdf", width = 5, height = 4)
+ggsave(paste0(here::here(), "/fig/tga_leafn_log.pdf"), width = 5, height = 4)
 
 df %>% 
   dplyr::filter(Species %in% use_species & sitename %in% use_sites) %>% 
   group_by(Species) %>% 
   ggplot(aes(x = log_leafP_sitemean, y = log_leafP, group = Species)) +
-  geom_smooth(method = "lm", se = FALSE, size = 0.2, alpha = 0.2, colour = "tomato3") +
+  geom_smooth(method = "lm", se = FALSE, size = 0.1, alpha = 0.2, colour = "tomato3") +
   geom_abline(intercept=0, slope=1, linetype="dotted") +
   coord_equal() +
   theme_classic() + 
   labs(x = expression(paste("log"[10], "(site mean leaf P)")), y = expression(paste("log"[10], "(species-level leaf P)")), title = "Leaf P")
   # geom_point(alpha = 0.3)
-ggsave("fig/tga_leafp_log.pdf", width = 5, height = 4)
+ggsave(paste0(here::here(), "/fig/tga_leafp_log.pdf"), width = 5, height = 4)
 ```
 
 ### Analysis of slopes
@@ -180,9 +193,14 @@ df_tga <- df %>%
   left_join(df %>% 
               dplyr::select(Family, Genus, Species) %>% 
               distinct(), 
-            by = "Species")
+            by = "Species") |> 
+  
+  # remove outlier in slope P
+  filter(slope_p > -5 & slope_p < 5)
 
 cols <- c("slope_n" = "royalblue3", "slope_p" = "tomato3")
+
+# distribution of slopes
 df_tga %>% 
   ggplot() +
   geom_histogram(aes(slope_n, ..density..), fill = "royalblue3", binwidth = 0.1, alpha = 0.5) +
@@ -194,8 +212,10 @@ df_tga %>%
   theme_classic() +
   labs(x = "Slope", y = "Density") +
   geom_vline(xintercept = 1, linetype = "dotted")
-ggsave("fig/tga_slopes_density.pdf", width = 7, height = 5)
 
+ggsave(paste0(here::here(), "/fig/tga_slopes_density.pdf"), width = 7, height = 5)
+
+# mean slopes by family: N
 df_tga %>% 
   group_by(Family) %>% 
   summarise(slope_n = mean(slope_n)) %>% 
@@ -208,8 +228,10 @@ df_tga %>%
   labs(y = "Slope", title = "Leaf N") +
   geom_hline(yintercept = 1.0, linetype = "dotted") +
   geom_hline(yintercept = 0.0)
-ggsave("fig/tga_slopes_bars_leafn.pdf", width = 7, height = 10)
 
+ggsave(paste0(here::here(), "/fig/tga_slopes_bars_leafn.pdf"), width = 7, height = 10)
+
+# mean slopes by family: P
 df_tga %>% 
   group_by(Family) %>% 
   summarise(slope_p = mean(slope_p)) %>% 
@@ -222,5 +244,57 @@ df_tga %>%
   labs(y = "Slope", title = "Leaf P") +
   geom_hline(yintercept = 1.0, linetype = "dotted") +
   geom_hline(yintercept = 0.0)
-ggsave("fig/tga_slopes_bars_leafp.pdf", width = 7, height = 10)
+
+ggsave(paste0(here::here(), "/fig/tga_slopes_bars_leafp.pdf"), width = 7, height = 10)
+
+# mean slopes of most common species: N
+df_tga %>% 
+  filter(Species %in% common_species) |> 
+  group_by(Species) %>%
+  summarise(slope_n = mean(slope_n)) %>%
+  ungroup() |> 
+  drop_na() %>% 
+  left_join(df_tga |> 
+              select(Species, Family, Genus) |> 
+              distinct(),
+            by = "Species") |> 
+  mutate(Species = fct_reorder(Species, slope_n)) %>% 
+  ggplot(aes(Species, slope_n, fill = Family)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  theme_classic() +
+  labs(y = "Slope", title = "Leaf N") +
+  geom_hline(yintercept = 1.0, linetype = "dotted") +
+  geom_hline(yintercept = 0.0)
+
+ggsave(paste0(here::here(), "/fig/tga_slopes_bars_leafn_species.pdf"), width = 7, height = 7)
+
+df_tga |> 
+  filter(Species %in% common_species) |> 
+  group_by(Species) |>
+  summarise(slope_p = mean(slope_p)) |>
+  ungroup() |> 
+  drop_na() |> 
+  left_join(df_tga |> 
+              select(Species, Family, Genus) |> 
+              distinct(),
+            by = "Species") |> 
+  mutate(Species = fct_reorder(Species, slope_p)) |> 
+  ggplot(aes(Species, slope_p, fill = Family)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  theme_classic() +
+  labs(y = "Slope", title = "Leaf P") +
+  geom_hline(yintercept = 1.0, linetype = "dotted") +
+  geom_hline(yintercept = 0.0)
+
+ggsave(paste0(here::here(), "/fig/tga_slopes_bars_leafp_species.pdf"), width = 7, height = 7)
+
+# correlation of slopes
+out <- df_tga |> 
+  # remove outliers
+  filter(slope_n > -5, slope_n < 5, slope_p > -5, slope_p < 5) |> 
+  rbeni::analyse_modobs2("slope_p", "slope_n", rsquared = FALSE)
+
+out$gg
 ```

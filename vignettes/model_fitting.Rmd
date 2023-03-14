@@ -21,8 +21,8 @@ library(cowplot)
 
 library(bestNormalize)
 library(metafor)
-# library(nlme)
-library(lme4)
+library(nlme)
+# library(lme4)
 library(lmerTest)
 library(effects)
 library(ggeffects)
@@ -109,7 +109,7 @@ df_lmm <- df_lmm %>%
 
 ```{r}
 target <- "leafN"
-shortlist <- readRDS(paste0("data/shortlist_", target, ".rds"))
+shortlist <- readRDS(paste0(here::here(), "/data/shortlist_", target, ".rds"))
 ```
 
 #### LMM
@@ -155,7 +155,7 @@ df_model_fitting <- df_model_fitting %>%
 ##### Full
 
 ```{r}
-filn <- "data/mod_rf_caret_leafn_species.rds"
+filn <- paste0(here::here(), "/data/mod_rf_caret_leafn_species.rds")
 
 if (file.exists(filn) && !overwrite){
   
@@ -165,7 +165,10 @@ if (file.exists(filn) && !overwrite){
   
   ## one-hot encoding for Species identity (warning: 3700 species)
   df1h <- df %>% 
-    recipe(leafN ~ ., data = dplyr::select(df, leafN, all_of(c(shortlist, "Species", "Family_New", "Genus")))) %>% 
+    recipe(leafN ~ ., 
+           data = dplyr::select(df, 
+                                leafN, 
+                                all_of(c(shortlist, "Species", "Family_New", "Genus")))) %>% 
     step_dummy(Species, one_hot = TRUE) %>% 
     step_dummy(Family_New, one_hot = TRUE) %>% 
     step_dummy(Genus, one_hot = TRUE) %>% 
@@ -179,7 +182,6 @@ if (file.exists(filn) && !overwrite){
     # step_medianimpute(all_predictors())
     step_impute_median(all_predictors())
 
-
   traincotrlParams <- trainControl( 
     method = "cv", 
     number = 5, 
@@ -189,9 +191,17 @@ if (file.exists(filn) && !overwrite){
   
   ## best choice
   tune_grid <- expand.grid( .mtry = floor((ncol(df1h)-2) / 3), 
-                            .min.node.size = 30,
+                            .min.node.size = c(5),
                             .splitrule = "variance"
                             )
+
+  #   5            2.967203  0.7714976  1.896609
+  #  10            2.986728  0.7687592  1.912957
+  #  30            3.073594  0.7560441  1.982790
+  #  50            3.145462  0.7450257  2.038922
+  # 100            3.283074  0.7229009  2.142982
+  # 200            3.468583  0.6912312  2.280178
+  # 300            3.583204  0.6706687  2.366706
   
   set.seed(1982)
   
@@ -203,9 +213,9 @@ if (file.exists(filn) && !overwrite){
     tuneGrid        = tune_grid,
     trControl       = traincotrlParams,
     replace         = TRUE,
-    sample.fraction = 0.5
-    # num.trees       = 2000,        # boosted for the final model
-    # importance      = "impurity"   # for variable importance analysis, alternative: "permutation"
+    sample.fraction = 0.5,
+    num.trees       = 2000,        # boosted for the final model
+    importance      = "impurity"   # for variable importance analysis, alternative: "permutation"
     )
   
   mod_rf_caret_leafn_species
@@ -231,7 +241,7 @@ df_model_fitting <- df_model_fitting %>%
 ##### Species-only
 
 ```{r}
-filn <- "data/mod_rf_caret_leafn_species_phylo.rds"
+filn <- paste0(here::here(), "/data/mod_rf_caret_leafn_species_phylo.rds")
 
 if (file.exists(filn) && !overwrite){
   
@@ -259,9 +269,9 @@ if (file.exists(filn) && !overwrite){
     savePredictions = "final"
     )
   
-  ## best choice
+  ## best choice (.min.node.size = 30 -> R2 = 0.6402244)
   tune_grid <- expand.grid( .mtry = floor((ncol(df1h_phylo)-2) / 3), 
-                            .min.node.size = 30,
+                            .min.node.size = c(30),
                             .splitrule = "variance"
                             )
   
@@ -275,9 +285,9 @@ if (file.exists(filn) && !overwrite){
     tuneGrid        = tune_grid,
     trControl       = traincotrlParams,
     replace         = TRUE,
-    sample.fraction = 0.5
-    # num.trees       = 2000,        # boosted for the final model
-    # importance      = "impurity"   # for variable importance analysis, alternative: "permutation"
+    sample.fraction = 0.5,
+    num.trees       = 2000,        # boosted for the final model
+    importance      = "impurity"   # for variable importance analysis, alternative: "permutation"
     )
   
   mod_rf_caret_leafn_species_phylo
@@ -303,7 +313,7 @@ df_model_fitting <- df_model_fitting %>%
 
 ```{r}
 target <- "leafP"
-longlist <- readRDS(paste0("data/longlist_", target, ".rds"))
+shortlist <- readRDS(paste0(here::here(), "/data/shortlist_", target, ".rds"))
 ```
 
 
@@ -318,7 +328,6 @@ mod_lmm_leafn <- lme(
     drop_na()
 
   )
-
 
 # This is new released July 21 2021 with many indicators
 tmp <- model_performance(mod_lmm_leafn, metrics = "common", verbose = TRUE)
@@ -351,7 +360,7 @@ df_model_fitting <- df_model_fitting %>%
 ##### Full
 
 ```{r}
-filn <- "data/mod_rf_caret_leafp_species.rds"
+filn <- paste0(here::here(), "/data/mod_rf_caret_leafp_species.rds")
 
 if (file.exists(filn) && !overwrite){
   
@@ -362,7 +371,9 @@ if (file.exists(filn) && !overwrite){
   ## one-hot encoding for Species identity (warning: 3700 species)
   df1h <- df %>% 
     recipe(leafP ~ ., 
-           data = dplyr::select(df, leafP, all_of(c(longlist, "Species", "Family_New", "Genus")))) %>% 
+           data = dplyr::select(df, 
+                                leafP, 
+                                all_of(c(shortlist, "Species", "Family_New", "Genus")))) %>% 
     step_dummy(Species, one_hot = TRUE) %>% 
     step_dummy(Family_New, one_hot = TRUE) %>% 
     step_dummy(Genus, one_hot = TRUE) %>% 
@@ -385,11 +396,33 @@ if (file.exists(filn) && !overwrite){
     )
   
   ## best choice
-  tune_grid <- expand.grid( .mtry = floor((ncol(df1h)-2) / 3), 
-                            .min.node.size = 30,
+  tune_grid <- expand.grid( .mtry = floor((ncol(df1h)-2) / 3),
+                            .min.node.size = 5,
                             .splitrule = "variance"
                             )
-  
+
+#   mtry  min.node.size  RMSE       Rsquared   MAE      
+#   100    5             0.3874082  0.5363492  0.2447423
+#   100   10             0.3904482  0.5303209  0.2472214
+#   100   30             0.4004939  0.5093304  0.2552350
+#   150    5             0.3805906  0.5485776  0.2366451
+#   150   10             0.3833998  0.5431304  0.2388715
+#   150   30             0.3938485  0.5216406  0.2474056
+#   200    5             0.3787757  0.5508954  0.2341348
+#   200   10             0.3812722  0.5459759  0.2360283
+#   200   30             0.3913629  0.5248930  0.2441936
+#   250    5             0.3780353  0.5518580  0.2335030
+#   250   10             0.3801319  0.5477035  0.2349782
+#   250   30             0.3894464  0.5283005  0.2426346
+  # 250    5             0.3781431  0.5515713  0.2336278
+  # 250   10             0.3805369  0.5466214  0.2352856
+  # 500    5             0.3785359  0.5497682  0.2339180
+  # 500   10             0.3804690  0.5455741  0.2351515
+# 
+# Tuning parameter 'splitrule' was held constant at a value of variance
+# RMSE was used to select the optimal model using the smallest value.
+# The final values used for the model were mtry = 250, splitrule = variance and min.node.size = 5.  
+    
   set.seed(1982)
   
   mod_rf_caret_leafp_species <- train(
@@ -400,9 +433,9 @@ if (file.exists(filn) && !overwrite){
     tuneGrid        = tune_grid,
     trControl       = traincotrlParams,
     replace         = TRUE,
-    sample.fraction = 0.5
-    # num.trees       = 2000,        # boosted for the final model
-    # importance      = "impurity"   # for variable importance analysis, alternative: "permutation"
+    sample.fraction = 0.5,
+    num.trees       = 2000,        # boosted for the final model
+    importance      = "impurity"   # for variable importance analysis, alternative: "permutation"
     )
   
   mod_rf_caret_leafp_species
@@ -424,7 +457,7 @@ df_model_fitting <- df_model_fitting %>%
 ##### Species-only
 
 ```{r}
-filn <- "data/mod_rf_caret_leafp_species_phylo.rds"
+filn <- paste0(here::here(), "/data/mod_rf_caret_leafp_species_phylo.rds")
 
 if (file.exists(filn) && !overwrite){
   
@@ -453,7 +486,7 @@ if (file.exists(filn) && !overwrite){
   
   ## best choice
   tune_grid <- expand.grid( .mtry = floor((ncol(df1h_phylo)-2) / 3), 
-                            .min.node.size = 30,
+                            .min.node.size = 30,    # no gain in lower values, tried c(5, 10, 30)
                             .splitrule = "variance"
                             )
   
@@ -467,9 +500,9 @@ if (file.exists(filn) && !overwrite){
     tuneGrid        = tune_grid,
     trControl       = traincotrlParams,
     replace         = TRUE,
-    sample.fraction = 0.5
-    # num.trees       = 2000,        # boosted for the final model
-    # importance      = "impurity"   # for variable importance analysis, alternative: "permutation"
+    sample.fraction = 0.5,
+    num.trees       = 2000,        # boosted for the final model
+    importance      = "impurity"   # for variable importance analysis, alternative: "permutation"
     )
   
   mod_rf_caret_leafp_species_phylo
@@ -492,7 +525,7 @@ df_model_fitting <- df_model_fitting %>%
 
 ```{r}
 target <- "LeafNP"
-longlist <- readRDS(paste0("data/longlist_", target, ".rds"))
+shortlist <- readRDS(paste0(here::here(), "/data/shortlist_", target, ".rds"))
 ```
 
 #### LMM
@@ -538,7 +571,7 @@ df_model_fitting <- df_model_fitting %>%
 ##### Full
 
 ```{r}
-filn <- "data/mod_rf_caret_leafnp_species.rds"
+filn <- paste0(here::here(), "/data/mod_rf_caret_leafnp_species.rds")
 
 if (file.exists(filn) && !overwrite){
   
@@ -548,7 +581,7 @@ if (file.exists(filn) && !overwrite){
   
   ## one-hot encoding for Species identity (warning: 3700 species)
   df1h <- df %>% 
-    recipe(LeafNP ~ ., data = dplyr::select(df, LeafNP, all_of(c(longlist, "Species", "Family_New", "Genus")))) %>% 
+    recipe(LeafNP ~ ., data = dplyr::select(df, LeafNP, all_of(c(shortlist, "Species", "Family_New", "Genus")))) %>% 
     step_dummy(Species, one_hot = TRUE) %>% 
     step_dummy(Family_New, one_hot = TRUE) %>% 
     step_dummy(Genus, one_hot = TRUE) %>% 
@@ -572,7 +605,7 @@ if (file.exists(filn) && !overwrite){
   
   ## best choice
   tune_grid <- expand.grid( .mtry = floor((ncol(df1h)-2) / 3), 
-                            .min.node.size = 30,
+                            .min.node.size = 10,  # tried, c(5, 10, 30, 40),
                             .splitrule = "variance"
                             )
   
@@ -586,9 +619,9 @@ if (file.exists(filn) && !overwrite){
     tuneGrid        = tune_grid,
     trControl       = traincotrlParams,
     replace         = TRUE,
-    sample.fraction = 0.5
-    # num.trees       = 2000,        # boosted for the final model
-    # importance      = "impurity"   # for variable importance analysis, alternative: "permutation"
+    sample.fraction = 0.5,
+    num.trees       = 2000,        # boosted for the final model
+    importance      = "impurity"   # for variable importance analysis, alternative: "permutation"
     )
   
   mod_rf_caret_leafnp_species
@@ -610,7 +643,7 @@ df_model_fitting <- df_model_fitting %>%
 ##### Species-only
 
 ```{r}
-filn <- "data/mod_rf_caret_leafnp_species_phylo.rds"
+filn <- paste0(here::here(), "/data/mod_rf_caret_leafnp_species_phylo.rds")
 
 if (file.exists(filn) && !overwrite){
   
@@ -638,11 +671,15 @@ if (file.exists(filn) && !overwrite){
     )
   
   ## best choice
-  tune_grid <- expand.grid( .mtry = floor((ncol(df1h_phylo)-2) / 3), 
-                            .min.node.size = 30,
+  tune_grid <- expand.grid( .mtry = floor((ncol(df1h)-2) / 3), 
+                            .min.node.size = 10,
                             .splitrule = "variance"
                             )
-  
+  # min.node.size  RMSE      Rsquared   MAE     
+  #  5             6.306300  0.3440797  3.156061
+  # 10             6.301759  0.3450017  3.155171
+  # 30             6.303985  0.3443676  3.156464
+    
   set.seed(1982)
   
   mod_rf_caret_leafnp_species_phylo <- train(
@@ -653,9 +690,9 @@ if (file.exists(filn) && !overwrite){
     tuneGrid        = tune_grid,
     trControl       = traincotrlParams,
     replace         = TRUE,
-    sample.fraction = 0.5
-    # num.trees       = 2000,        # boosted for the final model
-    # importance      = "impurity"   # for variable importance analysis, alternative: "permutation"
+    sample.fraction = 0.5,
+    num.trees       = 2000,        # boosted for the final model
+    importance      = "impurity"   # for variable importance analysis, alternative: "permutation"
     )
   
   mod_rf_caret_leafnp_species_phylo
@@ -680,7 +717,7 @@ df_model_fitting <- df_model_fitting %>%
 
 Load data aggregated to sites, done in `randomforest_leafnp.Rmd`.
 ```{r}
-filn <- "data/dfs_leafnp_20210729.rds"
+filn <- paste0(here::here(), "/data/dfs_leafnp_20210729.rds")
 
 if (!file.exists(filn)){
   
@@ -710,7 +747,7 @@ if (!file.exists(filn)){
 
 ```{r}
 target <- "leafN"
-shortlist <- readRDS(paste0("data/shortlist_", target, ".rds"))
+shortlist <- readRDS(paste0(here::here(), "/data/shortlist_", target, ".rds"))
 ```
 
 #### LM
@@ -742,7 +779,7 @@ df_model_fitting <- df_model_fitting %>%
 #### Random Forest
 
 ```{r}
-filn <- "data/mod_rf_caret_leafn.rds"
+filn <- paste0(here::here(), "/data/mod_rf_caret_leafn.rds")
 
 if (file.exists(filn) && !overwrite){
   
@@ -754,8 +791,8 @@ if (file.exists(filn) && !overwrite){
   pp <- recipe(leafN ~ ., data = dplyr::select(dfs, leafN, all_of(shortlist))) %>%
   
     ## impute by median as part of the recipe
-    step_medianimpute(all_predictors())
-    # step_impute_median(all_predictors())
+    # step_medianimpute(all_predictors())
+    step_impute_median(all_predictors())
 
   traincotrlParams <- trainControl( 
     method = "cv", 
@@ -765,10 +802,32 @@ if (file.exists(filn) && !overwrite){
     )
   
   ## best choice
-  tune_grid <- expand.grid( .mtry = 3, 
-                            .min.node.size = 8,
+  tune_grid <- expand.grid( .mtry = 3,
+                            .min.node.size = 5,
                             .splitrule = "variance"
                             )
+  
+#   mtry  min.node.size  RMSE      Rsquared   MAE     
+#   2      5             4.884196  0.4479481  3.514411
+#   2      8             4.896592  0.4455124  3.529126
+#   2     10             4.919218  0.4405717  3.544740
+#   2     30             5.007515  0.4218591  3.611234
+#   3      5             4.870319  0.4503581  3.500935
+#   3      8             4.881588  0.4481474  3.511033
+#   3     10             4.890466  0.4463209  3.519473
+#   3     30             4.988757  0.4248672  3.591211
+#   4      5             4.871780  0.4497299  3.503742
+#   4      8             4.882993  0.4472821  3.509671
+#   4     10             4.893394  0.4451099  3.518867
+#   4     30             4.968471  0.4289072  3.572633
+#   5      5             4.878588  0.4480658  3.503187
+#   5      8             4.879484  0.4479626  3.504207
+#   5     10             4.894362  0.4447319  3.517260
+#   5     30             4.968262  0.4284104  3.570183
+# 
+# Tuning parameter 'splitrule' was held constant at a value of variance
+# RMSE was used to select the optimal model using the smallest value.
+# The final values used for the model were mtry = 3, splitrule = variance and min.node.size = 5.
   
   set.seed(1982)
   
@@ -805,7 +864,7 @@ df_model_fitting <- df_model_fitting %>%
 
 ```{r}
 target <- "leafP"
-longlist <- readRDS(paste0("data/longlist_", target, ".rds"))
+shortlist <- readRDS(paste0(here::here(), "/data/shortlist_", target, ".rds"))
 ```
 
 #### LM
@@ -837,7 +896,7 @@ df_model_fitting <- df_model_fitting %>%
 #### Random Forest
 
 ```{r}
-filn <- "data/mod_rf_caret_leafp.rds"
+filn <- paste0(here::here(), "/data/mod_rf_caret_leafp.rds")
 
 if (file.exists(filn) && !overwrite){
   
@@ -849,8 +908,8 @@ if (file.exists(filn) && !overwrite){
   pp <- recipe(leafP ~ ., data = dplyr::select(dfs, leafP, all_of(shortlist))) %>%
   
     ## impute by median as part of the recipe
-    step_medianimpute(all_predictors())
-    # step_impute_median(all_predictors())
+    # step_medianimpute(all_predictors())
+    step_impute_median(all_predictors())
 
   traincotrlParams <- trainControl( 
     method = "cv", 
@@ -861,9 +920,31 @@ if (file.exists(filn) && !overwrite){
   
   ## best choice
   tune_grid <- expand.grid( .mtry = 3, 
-                            .min.node.size = 8,
+                            .min.node.size = 5,
                             .splitrule = "variance"
                             )
+
+#   mtry  min.node.size  RMSE       Rsquared   MAE      
+#   2      5             0.5042681  0.3357895  0.3243617
+#   2      8             0.5051088  0.3342590  0.3247737
+#   2     10             0.5056553  0.3332677  0.3251537
+#   2     30             0.5128529  0.3166988  0.3304216
+#   3      5             0.5034861  0.3373895  0.3240154
+#   3      8             0.5042383  0.3358247  0.3246955
+#   3     10             0.5046995  0.3346839  0.3249082
+#   3     30             0.5116329  0.3181036  0.3294687
+#   4      5             0.5044254  0.3346370  0.3250521
+#   4      8             0.5042814  0.3352189  0.3245283
+#   4     10             0.5051817  0.3329689  0.3252385
+#   4     30             0.5107109  0.3195499  0.3286733
+#   5      5             0.5043169  0.3348144  0.3243951
+#   5      8             0.5052328  0.3324299  0.3257510
+#   5     10             0.5055748  0.3317521  0.3256664
+#   5     30             0.5106812  0.3189370  0.3288055
+# 
+# Tuning parameter 'splitrule' was held constant at a value of variance
+# RMSE was used to select the optimal model using the smallest value.
+# The final values used for the model were mtry = 3, splitrule = variance and min.node.size = 5.  
   
   set.seed(1982)
   
@@ -900,7 +981,7 @@ df_model_fitting <- df_model_fitting %>%
 
 ```{r}
 target <- "LeafNP"
-longlist <- readRDS(paste0("data/longlist_", target, ".rds"))
+shortlist <- readRDS(paste0(here::here(), "/data/shortlist_", target, ".rds"))
 ```
 
 #### LM
@@ -932,7 +1013,7 @@ df_model_fitting <- df_model_fitting %>%
 #### Random Forest
 
 ```{r}
-filn <- "data/mod_rf_caret_leafnp.rds"
+filn <- paste0(here::here(), "/data/mod_rf_caret_leafnp.rds")
 
 if (file.exists(filn) && !overwrite){
   
@@ -944,8 +1025,8 @@ if (file.exists(filn) && !overwrite){
   pp <- recipe(LeafNP ~ ., data = dplyr::select(dfs, LeafNP, all_of(shortlist))) %>%
   
     ## impute by median as part of the recipe
-    step_medianimpute(all_predictors())
-    # step_impute_median(all_predictors())
+    # step_medianimpute(all_predictors())
+    step_impute_median(all_predictors())
 
   traincotrlParams <- trainControl( 
     method = "cv", 
@@ -955,11 +1036,33 @@ if (file.exists(filn) && !overwrite){
     )
   
   ## best choice
-  tune_grid <- expand.grid( .mtry = 3, 
-                            .min.node.size = 8,
+  tune_grid <- expand.grid( .mtry = 2, 
+                            .min.node.size = 5,
                             .splitrule = "variance"
                             )
   
+#   mtry  min.node.size  RMSE      Rsquared   MAE     
+#   2      5             5.528117  0.2790776  3.442130
+#   2      8             5.533388  0.2778906  3.442768
+#   2     10             5.542267  0.2754941  3.451749
+#   2     30             5.590654  0.2642769  3.489848
+#   3      5             5.534519  0.2772633  3.445870
+#   3      8             5.536107  0.2769081  3.450359
+#   3     10             5.535879  0.2770679  3.451145
+#   3     30             5.576416  0.2670492  3.474853
+#   4      5             5.534420  0.2775807  3.449510
+#   4      8             5.540016  0.2758562  3.451583
+#   4     10             5.540370  0.2756434  3.450493
+#   4     30             5.574360  0.2671489  3.473193
+#   5      5             5.545552  0.2748855  3.458211
+#   5      8             5.549643  0.2734559  3.459849
+#   5     10             5.547744  0.2738793  3.460229
+#   5     30             5.577375  0.2661357  3.476393
+# 
+# Tuning parameter 'splitrule' was held constant at a value of variance
+# RMSE was used to select the optimal model using the smallest value.
+# The final values used for the model were mtry = 2, splitrule = variance and min.node.size = 5.
+    
   set.seed(1982)
   
   mod_rf_caret_leafnp <- train(
@@ -1008,9 +1111,9 @@ For the non-aggregated, species-level data, The top edge of the bar represents t
 gg1 <- df_model_fitting %>% 
   filter(target == "leafN" & scale == "aggregated") %>% 
   ggplot(aes(x = model, y = rsq)) +
-  geom_bar(stat="identity", position = "identity", fill = "darkseagreen4") +
+  geom_bar(stat="identity", position = "identity", fill = "#29a274ff") +
   theme_classic() +
-  labs(title ="N", subtitle = "Site-level data", y = expression(italic(R)^2), x = "") +
+  labs(title ="Leaf N", subtitle = "Site-level data", y = expression(italic(R)^2), x = "") +
   scale_y_continuous(limits = c(0, 0.8), expand = c(0, 0))
 
 gg2 <- df_model_fitting %>% 
@@ -1018,17 +1121,17 @@ gg2 <- df_model_fitting %>%
   ggplot(aes(x = model, y = rsq, fill = pred)) +
   geom_bar(stat="identity", position = "identity") +
   theme_classic() +
-  labs(title ="N", subtitle = "Species-level data", y = expression(italic(R)^2), x = "") +
-  scale_fill_manual(values = c("darkseagreen4", "darkgoldenrod4"), labels = c("Environment", "Phylogenetic"), name = NULL) +
+  labs(title ="Leaf N", subtitle = "Species-level data", y = expression(italic(R)^2), x = "") +
+  scale_fill_manual(values = c("#29a274ff", "#777055ff"), labels = c("Environment", "Phylogenetic"), name = NULL) +
   scale_y_continuous(limits = c(0, 0.8), expand = c(0, 0))
 
 # P
 gg3 <- df_model_fitting %>% 
   filter(target == "leafP" & scale == "aggregated") %>% 
   ggplot(aes(x = model, y = rsq)) +
-  geom_bar(stat="identity", position = "identity", fill = "darkseagreen4") +
+  geom_bar(stat="identity", position = "identity", fill = "#29a274ff") +
   theme_classic() +
-  labs(title ="P", subtitle = "Site-level data", y = expression(italic(R)^2), x = "") +
+  labs(title ="Leaf P", subtitle = "Site-level data", y = expression(italic(R)^2), x = "") +
   scale_y_continuous(limits = c(0, 0.8), expand = c(0, 0))
 
 gg4 <- df_model_fitting %>% 
@@ -1036,17 +1139,17 @@ gg4 <- df_model_fitting %>%
   ggplot(aes(x = model, y = rsq, fill = pred)) +
   geom_bar(stat="identity", position = "identity") +
   theme_classic() +
-  labs(title ="P", subtitle = "Species-level data", y = expression(italic(R)^2), x = "") +
-  scale_fill_manual(values = c("darkseagreen4", "darkgoldenrod4"), labels = c("Environment", "Phylogenetic"), name = NULL) +
+  labs(title ="Leaf P", subtitle = "Species-level data", y = expression(italic(R)^2), x = "") +
+  scale_fill_manual(values = c("#29a274ff", "#777055ff"), labels = c("Environment", "Phylogenetic"), name = NULL) +
   scale_y_continuous(limits = c(0, 0.8), expand = c(0, 0))
 
 # N:P
 gg5 <- df_model_fitting %>% 
   filter(target == "LeafNP" & scale == "aggregated") %>% 
   ggplot(aes(x = model, y = rsq)) +
-  geom_bar(stat="identity", position = "identity", fill = "darkseagreen4") +
+  geom_bar(stat="identity", position = "identity", fill = "#29a274ff") +
   theme_classic() +
-  labs(title ="N:P", subtitle = "Site-level data", y = expression(italic(R)^2), x = "") +
+  labs(title ="Leaf N:P", subtitle = "Site-level data", y = expression(italic(R)^2), x = "") +
   scale_y_continuous(limits = c(0, 0.8), expand = c(0, 0))
 
 gg6 <- df_model_fitting %>% 
@@ -1054,8 +1157,8 @@ gg6 <- df_model_fitting %>%
   ggplot(aes(x = model, y = rsq, fill = pred)) +
   geom_bar(stat="identity", position = "identity") +
   theme_classic() +
-  labs(title ="N:P", subtitle = "Species-level data", y = expression(italic(R)^2), x = "") +
-  scale_fill_manual(values = c("darkseagreen4", "darkgoldenrod4"), labels = c("Environment", "Phylogenetic"), name = NULL) +
+  labs(title ="Leaf N:P", subtitle = "Species-level data", y = expression(italic(R)^2), x = "") +
+  scale_fill_manual(values = c("#29a274ff", "#777055ff"), labels = c("Environment", "Phylogenetic"), name = NULL) +
   scale_y_continuous(limits = c(0, 0.8), expand = c(0, 0))
 
 plot_grid(gg1, gg2, rel_widths = c(0.5, 0.8), ncol = 2)
@@ -1063,5 +1166,5 @@ plot_grid(gg3, gg4, rel_widths = c(0.5, 0.8), ncol = 2)
 plot_grid(gg5, gg6, rel_widths = c(0.5, 0.8), ncol = 2)
 
 plot_grid(gg1, gg2, gg3, gg4, gg5, gg6, rel_widths = c(0.5, 0.8), ncol = 2, labels = c("a", "b", "c", "d", "e", "f"))
-ggsave("fig/bars_model_fitting.pdf", width = 6, height = 8)
+ggsave(paste0(here::here(), "/fig/bars_model_fitting.pdf"), width = 6, height = 8)
 ```
