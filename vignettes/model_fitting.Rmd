@@ -1094,6 +1094,86 @@ df_model_fitting <- df_model_fitting %>%
   bind_rows(addrow)
 ```
 
+## Modelled vs observed
+
+### Leaf N
+
+Visualise cross-validation results using results from the best tuned model.
+```{r}
+filn <- paste0(here::here(), "/data/mod_rf_caret_leafn.rds")
+mod_rf_caret_leafn <- readRDS(filn)
+
+## get predicted values from cross-validation resamples, take mean across repetitions
+df_cv <- mod_rf_caret_leafn$pred %>% 
+  as_tibble() %>% 
+  dplyr::filter(mtry == mod_rf_caret_leafn$bestTune$mtry, 
+                splitrule == mod_rf_caret_leafn$bestTune$splitrule, 
+                min.node.size == mod_rf_caret_leafn$bestTune$min.node.size) %>%
+  separate(Resample, into = c(NA, "Fold"), sep = "old") %>% 
+  dplyr::rename(idx = rowIndex)
+
+out <- df_cv %>% 
+  rbeni::analyse_modobs2("pred", "obs", type = "heat", shortsubtitle = TRUE)
+gg1 <- out$gg +
+  ylim(5,40) + xlim(5,40) +
+  labs(x = "Predicted leaf N (mg/g)", y = "Observed leaf N (mg/g)")
+gg1
+saveRDS(gg1, file = paste0(here::here(), "/data/gg1.rds"))
+write_csv(df_cv, file = paste0(here::here(), "/data/df_cv_leafn.csv"))
+```
+
+### Leaf P
+
+Visualise cross-validation results using results from the best tuned model.
+```{r}
+filn <- paste0(here::here(), "/data/mod_rf_caret_leafp.rds")
+mod_rf_caret_leafp <- readRDS(filn)
+
+## get predicted values from cross-validation resamples, take mean across repetitions
+df_cv <- mod_rf_caret_leafp$pred %>% 
+  as_tibble() %>% 
+  dplyr::filter(mtry == mod_rf_caret_leafp$bestTune$mtry, 
+                splitrule == mod_rf_caret_leafp$bestTune$splitrule, 
+                min.node.size == mod_rf_caret_leafp$bestTune$min.node.size) %>%
+  separate(Resample, into = c(NA, "Fold"), sep = "old") %>% 
+  dplyr::rename(idx = rowIndex)
+
+out <- df_cv %>% 
+  rbeni::analyse_modobs2("pred", "obs", type = "heat", shortsubtitle = TRUE)
+gg2 <- out$gg +
+  ylim(0, 4) + xlim(0, 4) +
+  labs(x = "Predicted leaf N (mg/g)", y = "Observed leaf N (mg/g)")
+gg2
+saveRDS(gg2, file = paste0(here::here(), "/data/gg2.rds"))
+write_csv(df_cv, file = paste0(here::here(), "/data/df_cv_leafp.csv"))
+```
+
+### Leaf N:P
+
+Visualise cross-validation results using results from the best tuned model.
+```{r}
+filn <- paste0(here::here(), "/data/mod_rf_caret_leafnp.rds")
+mod_rf_caret_leafnp <- readRDS(filn)
+
+## get predicted values from cross-validation resamples, take mean across repetitions
+df_cv <- mod_rf_caret_leafnp$pred %>% 
+  as_tibble() %>% 
+  dplyr::filter(mtry == mod_rf_caret_leafnp$bestTune$mtry, 
+                splitrule == mod_rf_caret_leafnp$bestTune$splitrule, 
+                min.node.size == mod_rf_caret_leafnp$bestTune$min.node.size) %>%
+  separate(Resample, into = c(NA, "Fold"), sep = "old") %>% 
+  dplyr::rename(idx = rowIndex)
+
+out <- df_cv %>% 
+  rbeni::analyse_modobs2("pred", "obs", type = "heat", shortsubtitle = TRUE)
+gg3 <- out$gg +
+  ylim(0, 40) + xlim(0, 40) +
+  labs(x = "Predicted leaf N (mg/g)", y = "Observed leaf N (mg/g)")
+gg3
+saveRDS(gg3, file = paste0(here::here(), "/data/gg3.rds"))
+write_csv(df_cv, file = paste0(here::here(), "/data/df_cv_leafnp.csv"))
+```
+
 ## Visualisation
 
 Explanation:
@@ -1101,10 +1181,6 @@ Explanation:
 For the data aggregated to site-level (a, c, d), the R2 represents the coefficient of determination on a multivariate linear regression model (LM), and the mean across a 5-fold cross validation for the RF. Only environmental factors are considered as model predictors. 
 
 For the non-aggregated, species-level data, The top edge of the bar represents the conditional R-squared for the linear mixed effects models (LMM) and the mean across a 5-fold cross validation for the RF, using environmental and phylogenetic variables as predictors. Species identity is considered as the grouping variable for random intercepts in the LMM and is considered as a one-hot encoded predictor in the RF. The "phylogenetic" portion (brown bar) visualises the the intraclass correlation coefficient (ICC) for the LMMs, determined on the same model and representing the proportion of the variance explained by species identity. For the RF models, the "phylogenetic" pportion of the bar represents the R-quared (mean across 5-fold cross validation) of a model that contains only species, genus, and family identity (one-hot encoded) as predictors.
-
-
-
-
 
 ```{r}
 # N
