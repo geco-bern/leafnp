@@ -1238,6 +1238,34 @@ df_wwf_sub <- dfs_wwf |>
   ungroup()
 ```
 
+### Number of species per biome
+
+Analyse number of distinct species by biome.
+```{r}
+df |> 
+  left_join(
+    select(df_wwf_sub, sitename, mybiome),
+    by = "sitename"
+  ) |> 
+  select(mybiome, Species) |> 
+  distinct() |> 
+  group_by(mybiome) |> 
+  summarise(n = n()) |> 
+  arrange(desc(n)) |> 
+  drop_na()
+
+# just boreal
+df |> 
+  left_join(
+    select(df_wwf_sub, sitename, mybiome),
+    by = "sitename"
+  ) |> 
+  filter(mybiome == "Boreal") |> 
+  group_by(Species) |> 
+  summarise(n = n()) |> 
+  arrange(desc(n))
+```
+
 
 ### Fit model
 

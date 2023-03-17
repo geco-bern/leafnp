@@ -261,6 +261,19 @@ df_mean_species <- df %>%
             leafP_mean  = mean(leafP),
             leafNP_mean = mean(LeafNP))
 
+# get ranges across all sites
+range_n_sitemeans <- df |> 
+  pull(leafN_sitemean) |> 
+  quantile(probs = c(0.01, 0.99)) |> 
+  diff()
+range_p_sitemeans <- df |> 
+  pull(leafP_sitemean) |> 
+  quantile(probs = c(0.01, 0.99)) |> 
+  diff()
+range_np_sitemeans <- df |> 
+  pull(leafNP_sitemean) |> 
+  quantile(probs = c(0.01, 0.99)) |> 
+  diff()
 
 df_tga <- df %>% 
   
@@ -300,15 +313,20 @@ df_tga <- df %>%
               dplyr::select(Family, Genus, Species) %>% 
               distinct(), 
             by = "Species") |> 
+  
+  # # standardise by the total range (difference between the 1% and the 99% quantiles)
+  # mutate(range_n_norm  = range_n / range_n_sitemeans,
+  #        range_p_norm  = range_p / range_p_sitemeans,
+  #        range_np_norm = range_np / range_np_sitemeans) |>
 
   # standardise by dividing by mean of species
   left_join(
     df_mean_species,
     by = "Species"
-  ) |> 
+  ) |>
   mutate(range_n_norm  = range_n / leafN_mean,
          range_p_norm  = range_p / leafP_mean,
-         range_np_norm = range_np / leafNP_mean) |> 
+         range_np_norm = range_np / leafNP_mean) |>
   
   # remove outlier in slope P
   filter(slope_p > -5 & slope_p < 5 & range_p_norm > 0)
@@ -335,7 +353,9 @@ ggsave(paste0(here::here(), "/fig/tga_slopes_density.pdf"), width = 7, height = 
 
 # distribution of widths
 gg_ranges <- df_tga %>% 
-  pivot_longer(c(range_n_norm, range_p_norm, range_np_norm), values_to = "range", names_to = "trait") |> 
+  pivot_longer(c(range_n_norm, range_p_norm, range_np_norm), 
+               values_to = "range", 
+               names_to = "trait") |> 
   mutate(trait = factor(trait, level = c("range_n_norm", "range_p_norm", "range_np_norm"))) |> 
   ggplot(aes(range, ..density.., color = trait, fill = trait)) +
   geom_density(alpha = 0.3) +
