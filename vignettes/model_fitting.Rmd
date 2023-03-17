@@ -1112,6 +1112,21 @@ df_cv <- mod_rf_caret_leafn$pred %>%
   separate(Resample, into = c(NA, "Fold"), sep = "old") %>% 
   dplyr::rename(idx = rowIndex)
 
+# contains the same values as dplyr::select(dfs, leafN, all_of(shortlist)) ?
+target <- "leafN"
+shortlist <- readRDS(paste0(here::here(), "/data/shortlist_", target, ".rds"))
+tmp <- dplyr::select(dfs, leafN, all_of(shortlist)) |> 
+  mutate(idx = 1:nrow(dfs)) |> 
+  right_join(
+    df_cv,
+    by = "idx"
+  )
+
+# correct
+out <- tmp |> 
+  rbeni::analyse_modobs2("leafN", "obs")
+out$gg
+
 out <- df_cv %>% 
   rbeni::analyse_modobs2("pred", "obs", type = "heat", shortsubtitle = TRUE)
 gg1 <- out$gg +
@@ -1173,6 +1188,141 @@ gg3
 saveRDS(gg3, file = paste0(here::here(), "/data/gg3.rds"))
 write_csv(df_cv, file = paste0(here::here(), "/data/df_cv_leafnp.csv"))
 ```
+
+## Morphoclimatic groups
+
+### Get data
+
+Extract biome information from WWF and NCRS biome map.
+```{r eval=FALSE}
+filn <- paste0(here::here(), "/data/dfs_morphoclim.rds")
+
+if (!file.exists(filn)){
+
+  df_biome_id <- read_csv(paste0(here::here(), "/data/biome_id.csv"))
+
+  ## add WWF biome info
+  dfs_wwf <- ingestr::ingest(
+    dfs|> 
+      dplyr::select(sitename, lon, lat),
+    source = "wwf",
+    dir = "~/data/biomes/wwf_ecoregions/official/",
+    settings = list(layer = "wwf_terr_ecos")
+    )|> 
+    mutate(data = purrr::map(data, ~slice(., 1)))|> 
+    unnest(data) |> 
+    select(sitename, biome_wwf = BIOME_NAME) |> 
+    left_join(df_biome_id, by = "biome_wwf") |> 
+    right_join(dfs, by = "sitename")
+  
+  saveRDS(dfs_wwf, file = filn)
+  
+} else {
+  dfs_wwf <- readRDS(filn)
+}
+```
+
+Consider only biomes with enough data (N > 100).
+```{r}
+use_biomes <- dfs_wwf |> 
+  group_by(mybiome) |> 
+  summarise(n = n()) |> 
+  filter(n > 100) |> 
+  pull(mybiome)
+```
+
+Subset.
+```{r}
+df_wwf_sub <- dfs_wwf |> 
+  filter(mybiome %in% use_biomes) |> 
+  ungroup()
+```
+
+
+### Fit model
+
+```{r}
+target <- "leafN"
+shortlist <- readRDS(paste0(here::here(), "/data/shortlist_", target, ".rds"))
+
+filn <- paste0(here::here(), "/data/mod_rf_caret_leafn_morphoclim.rds")
+
+if (file.exists(filn) && !overwrite){
+  
+  mod_rf_caret_leafn <- readRDS(filn)
+  
+} else {
+ 
+  ## one-hot encoding for Species identity (warning: 3700 species)
+  df1h <- df_wwf_sub %>% 
+    recipe(leafN ~ ., 
+           data = dplyr::select(df_wwf_sub, 
+                                leafN, 
+                                all_of(c(shortlist, "mybiome")))) %>% 
+    step_dummy(mybiome, one_hot = TRUE) %>% 
+    prep(training = df_wwf_sub, retain = TRUE) %>% 
+    juice()
+ 
+  ## create generic formula for the model and define preprocessing steps
+  pp <- recipe(leafN ~ ., data = df1h) %>%
+  
+    ## impute by median as part of the recipe
+    step_impute_median(all_predictors())
+
+
+  traincotrlParams <- trainControl( 
+    method = "cv", 
+    number = 5, 
+    verboseIter = FALSE,
+    savePredictions = "final"
+    )
+  
+  ## best choice
+  tune_grid <- expand.grid( .mtry = floor((ncol(df1h)-1) / 3),
+                            .min.node.size = 5,
+                            .splitrule = "variance"
+                            )
+  
+#   min.node.size  RMSE      Rsquared   MAE     
+#    5             4.845727  0.4556901  3.474374
+#   10             4.879364  0.4486083  3.499563
+#   20             4.924898  0.4388536  3.532184
+#   30             4.961296  0.4310342  3.564307
+#   50             5.021667  0.4177730  3.607971
+# 
+# Tuning parameter 'mtry' was held constant at a value of 5
+# Tuning parameter 'splitrule'
+#  was held constant at a value of variance
+# RMSE was used to select the optimal model using the smallest value.
+# The final values used for the model were mtry = 5, splitrule = variance and min.node.size = 3.
+
+  set.seed(1982)
+  
+  mod_rf_caret_leafn_morphoclim <- train(
+    pp,
+    data            = df1h,
+    metric          = "RMSE",
+    method          = "ranger",
+    tuneGrid        = tune_grid,
+    trControl       = traincotrlParams,
+    replace         = TRUE,
+    sample.fraction = 0.5,
+    num.trees       = 2000,        # boosted for the final model
+    importance      = "impurity"   # for variable importance analysis, alternative: "permutation"
+    )
+  
+  saveRDS(mod_rf_caret_leafn_morphoclim, file = filn)
+  
+} else {
+  
+  mod_rf_caret_leafn_morphoclim <- readRDS(filn)
+  
+}
+
+# model results
+mod_rf_caret_leafn_morphoclim
+```
+
 
 ## Visualisation
 

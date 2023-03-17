@@ -188,16 +188,19 @@ df %>%
 
 Plot just the lines
 ```{r}
+highcontrast <- khroma::colour("high contrast")
+cols <- highcontrast(3)
+
 # N
 gg1 <- df %>% 
   dplyr::filter(Species %in% use_species & sitename %in% use_sites) %>% 
   drop_na(log_leafN_sitemean, log_leafN) |> 
   group_by(Species) %>% 
   ggplot(aes(x = log_leafN_sitemean, y = log_leafN, group = Species)) +
-  geom_smooth(method = "lm", se = FALSE, size = 0.1, alpha = 0.2, colour = "royalblue3") +
+  geom_smooth(method = "lm", se = FALSE, size = 0.1, alpha = 0.2, colour = cols[1]) +
   geom_abline(intercept=0, slope=1, linetype="dotted") +
   theme_classic() +
-  coord_equal() + 
+  xlim(0.7, 1.8) + ylim(0.7, 1.8) +
   labs(x = expression(paste("site mean of log"[10],"(Leaf N)")), y = expression(paste("log"[10], "(Leaf N)")), title = "Leaf N")
   # geom_point(alpha = 0.3)
 
@@ -209,9 +212,9 @@ gg2 <- df %>%
   dplyr::filter(Species %in% use_species & sitename %in% use_sites) %>% 
   group_by(Species) %>% 
   ggplot(aes(x = log_leafP_sitemean, y = log_leafP, group = Species)) +
-  geom_smooth(method = "lm", se = FALSE, size = 0.1, alpha = 0.2, colour = "tomato3") +
+  geom_smooth(method = "lm", se = FALSE, size = 0.1, alpha = 0.2, colour = cols[2]) +
   geom_abline(intercept=0, slope=1, linetype="dotted") +
-  coord_equal() +
+  xlim(-0.6, 0.8) + ylim(-0.6, 0.8) +
   theme_classic() + 
   labs(x = expression(paste("site mean of log"[10],"(Leaf P)")), y = expression(paste("log"[10], "(Leaf P)")), title = "Leaf P")
   # geom_point(alpha = 0.3)
@@ -224,9 +227,9 @@ gg3 <- df %>%
   dplyr::filter(Species %in% use_species & sitename %in% use_sites) %>% 
   group_by(Species) %>% 
   ggplot(aes(x = log_leafNP_sitemean, y = log_leafNP, group = Species)) +
-  geom_smooth(method = "lm", se = FALSE, size = 0.1, alpha = 0.2, colour = "darkgoldenrod3") +
+  geom_smooth(method = "lm", se = FALSE, size = 0.1, alpha = 0.2, colour = cols[3]) +
   geom_abline(intercept=0, slope=1, linetype="dotted") +
-  coord_equal() +
+  xlim(0.5, 2) + ylim(0.5, 2) +
   theme_classic() + 
   labs(x = expression(paste("site mean of log"[10],"(Leaf N:P)")), y = expression(paste("log"[10], "(Leaf N:P)")), title = "Leaf N:P")
   # geom_point(alpha = 0.3)
@@ -234,59 +237,118 @@ gg3 <- df %>%
 gg3
 ggsave(paste0(here::here(), "/fig/tga_leafnp_log.pdf"), width = 3.5, height = 4)
 
-cowplot::plot_grid(gg1, gg2, gg3, labels = c("a", "b", "c"), ncol = 3)
-ggsave(paste0(here::here(), "/fig/tga_log.pdf"), width = 10, height = 4)
+toprow <- cowplot::plot_grid(gg1, gg2, gg3, labels = c("a", "b", "c"), ncol = 3)
+toprow
+ggsave(paste0(here::here(), "/fig/tga_log.pdf"), width = 12, height = 4)
 ```
 
 ### Analysis of slopes
 
 Fit linear regressions by species.
 ```{r}
+get_x <- function(linmod){
+  as.vector(linmod$x[,2])
+}
+
+df_mean_species <- df %>% 
+  
+  # subset
+  dplyr::filter(Species %in% use_species & sitename %in% use_sites) |> 
+  
+  # fit linear regressions by species
+  group_by(Species) |> 
+  summarise(leafN_mean  = mean(leafN),
+            leafP_mean  = mean(leafP),
+            leafNP_mean = mean(LeafNP))
+
+
 df_tga <- df %>% 
+  
+  # subset
   dplyr::filter(Species %in% use_species & sitename %in% use_sites) %>% 
+  
+  # fit linear regressions by species
   group_by(Species) %>% 
   nest() %>% 
-  mutate(linmod_n  = purrr::map(data, ~lm(log_leafN  ~ log_leafN_sitemean,  data = ., x = TRUE)),
-         linmod_p  = purrr::map(data, ~lm(log_leafP  ~ log_leafP_sitemean,  data = ., x = TRUE)),
-         linmod_np = purrr::map(data, ~lm(log_leafNP ~ log_leafNP_sitemean, data = ., x = TRUE))) %>% 
-  mutate(slope_n  = purrr::map_dbl(linmod_n,  ~coef(.)[2]),
-         slope_p  = purrr::map_dbl(linmod_p,  ~coef(.)[2]),
-         slope_np = purrr::map_dbl(linmod_np, ~coef(.)[2]),
-         range_n  = purrr::map(linmod_n,  "x"),
-         range_p  = purrr::map(linmod_p,  "x"),
-         range_np = purrr::map(linmod_np, "x")) %>% 
+  mutate(linmod_log_n  = purrr::map(data, ~lm(log_leafN  ~ log_leafN_sitemean,  data = ., x = TRUE)),
+         linmod_log_p  = purrr::map(data, ~lm(log_leafP  ~ log_leafP_sitemean,  data = ., x = TRUE)),
+         linmod_log_np = purrr::map(data, ~lm(log_leafNP ~ log_leafNP_sitemean, data = ., x = TRUE)),
+         
+         linmod_n  = purrr::map(data, ~lm(leafN  ~ leafN_sitemean,  data = ., x = TRUE)),
+         linmod_p  = purrr::map(data, ~lm(leafP  ~ leafP_sitemean,  data = ., x = TRUE)),
+         linmod_np = purrr::map(data, ~lm(LeafNP ~ leafNP_sitemean, data = ., x = TRUE)),
+         ) %>% 
+  
+  # slope in log-TGA
+  mutate(slope_n  = purrr::map_dbl(linmod_log_n,  ~coef(.)[2]),
+         slope_p  = purrr::map_dbl(linmod_log_p,  ~coef(.)[2]),
+         slope_np = purrr::map_dbl(linmod_log_np, ~coef(.)[2]),
+         
+         # site-level mean values from (raw) TGA
+         range_n  = purrr::map(linmod_n,  ~get_x(.)),
+         range_p  = purrr::map(linmod_p,  ~get_x(.)),
+         range_np = purrr::map(linmod_np, ~get_x(.))) |> 
+  
+  # range in site-level mean from raw TGA
   mutate(range_n  = purrr::map_dbl(range_n,  ~diff(range(.))),
          range_p  = purrr::map_dbl(range_p,  ~diff(range(.))),
-         range_np = purrr::map_dbl(range_np, ~diff(range(.)))) |> 
+         range_np = purrr::map_dbl(range_np, ~diff(range(.))),
+         ) |> 
+  
+  # get phylo info
   left_join(df %>% 
               dplyr::select(Family, Genus, Species) %>% 
               distinct(), 
             by = "Species") |> 
+
+  # standardise by dividing by mean of species
+  left_join(
+    df_mean_species,
+    by = "Species"
+  ) |> 
+  mutate(range_n_norm  = range_n / leafN_mean,
+         range_p_norm  = range_p / leafP_mean,
+         range_np_norm = range_np / leafNP_mean) |> 
   
   # remove outlier in slope P
-  filter(slope_p > -5 & slope_p < 5)
+  filter(slope_p > -5 & slope_p < 5 & range_p_norm > 0)
 ```
 
 
 ```{r}
-cols <- c("slope_n" = "royalblue3", "slope_p" = "tomato3", "slope_np" = "darkgoldenrod3")
-
 # distribution of slopes
-df_tga %>% 
-  ggplot() +
-  # geom_histogram(aes(slope_n, ..density..), fill = "royalblue3", binwidth = 0.1, alpha = 0.5) +
-  geom_density(aes(slope_n, ..density.., color = "slope_n")) +
-  # geom_histogram(aes(slope_p, ..density..), fill = "tomato3", binwidth = 0.1, alpha = 0.5) +
-  geom_density(aes(slope_p, ..density.., color = "slope_p")) +
-  # geom_histogram(aes(slope_np, ..density..), fill = "tomato3", binwidth = 0.1, alpha = 0.5) +
-  geom_density(aes(slope_np, ..density.., color = "slope_np")) +
-  scale_color_manual(values = cols, labels = c("N", "P", "N:P")) +
+gg_slopes <- df_tga %>% 
+  pivot_longer(c(slope_n, slope_p, slope_np), values_to = "slope", names_to = "trait") |> 
+  mutate(trait = factor(trait, level = c("slope_n", "slope_p", "slope_np"))) |> 
+  ggplot(aes(slope, ..density.., color = trait, fill = trait)) +
+  geom_density(alpha = 0.3) +
+  khroma::scale_color_highcontrast(labels = c("N", "P", "N:P")) +
+  khroma::scale_fill_highcontrast(labels = c("N", "P", "N:P")) +
   xlim(-2,3) +
   theme_classic() +
   labs(x = "Slope", y = "Density") +
-  geom_vline(xintercept = 1, linetype = "dotted")
+  geom_vline(xintercept = 1, linetype = "dotted") +
+  theme(legend.title = element_blank())
 
+gg_slopes
 ggsave(paste0(here::here(), "/fig/tga_slopes_density.pdf"), width = 7, height = 5)
+
+# distribution of widths
+gg_ranges <- df_tga %>% 
+  pivot_longer(c(range_n_norm, range_p_norm, range_np_norm), values_to = "range", names_to = "trait") |> 
+  mutate(trait = factor(trait, level = c("range_n_norm", "range_p_norm", "range_np_norm"))) |> 
+  ggplot(aes(range, ..density.., color = trait, fill = trait)) +
+  geom_density(alpha = 0.3) +
+  khroma::scale_color_highcontrast(labels = c("N", "P", "N:P")) +
+  khroma::scale_fill_highcontrast(labels = c("N", "P", "N:P")) +
+  # xlim(-2,3) +
+  theme_classic() +
+  labs(x = "Normalised range", y = "Density") +
+  geom_vline(xintercept = 1, linetype = "dotted") +
+  theme(legend.title = element_blank())
+
+gg_ranges
+ggsave(paste0(here::here(), "/fig/tga_ranges_density.pdf"), width = 7, height = 5)
 
 # mean slopes by family: N
 df_tga %>% 
@@ -300,7 +362,8 @@ df_tga %>%
   theme_classic() +
   labs(y = "Slope", title = "Leaf N") +
   geom_hline(yintercept = 1.0, linetype = "dotted") +
-  geom_hline(yintercept = 0.0)
+  geom_hline(yintercept = 0.0) +
+  khroma::scale_fill_discreterainbow()
 
 ggsave(paste0(here::here(), "/fig/tga_slopes_bars_leafn.pdf"), width = 7, height = 10)
 
@@ -316,12 +379,13 @@ df_tga %>%
   theme_classic() +
   labs(y = "Slope", title = "Leaf P") +
   geom_hline(yintercept = 1.0, linetype = "dotted") +
-  geom_hline(yintercept = 0.0)
+  geom_hline(yintercept = 0.0) +
+  khroma::scale_fill_discreterainbow()
 
 ggsave(paste0(here::here(), "/fig/tga_slopes_bars_leafp.pdf"), width = 7, height = 10)
 
 # mean slopes of most common species: N
-df_tga %>% 
+gg_slopes_species_n <- df_tga %>% 
   filter(Species %in% common_species) |> 
   group_by(Species) %>%
   summarise(slope_n = mean(slope_n)) %>%
@@ -333,17 +397,21 @@ df_tga %>%
             by = "Species") |> 
   mutate(Species = fct_reorder(Species, slope_n)) %>% 
   ggplot(aes(Species, slope_n, fill = Family)) +
-  geom_bar(stat = "identity") +
+  geom_bar(stat = "identity", show.legend = FALSE) +
   coord_flip() +
   theme_classic() +
   labs(y = "Slope", title = "Leaf N") +
   geom_hline(yintercept = 1.0, linetype = "dotted") +
-  geom_hline(yintercept = 0.0)
+  geom_hline(yintercept = 0.0) +
+  # scale_fill_manual(values = as.vector(pals::stepped(18)))
+  khroma::scale_fill_discreterainbow() +
+  theme(axis.text.y = element_text(face = "italic"))
 
+gg_slopes_species_n
 ggsave(paste0(here::here(), "/fig/tga_slopes_bars_leafn_species.pdf"), width = 7, height = 7)
 
 # mean slopes of most common species: P
-df_tga |> 
+gg_slopes_species_p <- df_tga |> 
   filter(Species %in% common_species) |> 
   group_by(Species) |>
   summarise(slope_p = mean(slope_p)) |>
@@ -355,17 +423,20 @@ df_tga |>
             by = "Species") |> 
   mutate(Species = fct_reorder(Species, slope_p)) |> 
   ggplot(aes(Species, slope_p, fill = Family)) +
-  geom_bar(stat = "identity") +
+  geom_bar(stat = "identity", show.legend = FALSE) +
   coord_flip() +
   theme_classic() +
   labs(y = "Slope", title = "Leaf P") +
   geom_hline(yintercept = 1.0, linetype = "dotted") +
-  geom_hline(yintercept = 0.0)
+  geom_hline(yintercept = 0.0) +
+  khroma::scale_fill_discreterainbow() +
+  theme(axis.text.y = element_text(face = "italic"))
 
+gg_slopes_species_p
 ggsave(paste0(here::here(), "/fig/tga_slopes_bars_leafp_species.pdf"), width = 7, height = 7)
 
 # mean slopes of most common species: N:P
-df_tga |> 
+gg_slopes_species_np <- df_tga |> 
   filter(Species %in% common_species) |> 
   group_by(Species) |>
   summarise(slope_np = mean(slope_np)) |>
@@ -382,10 +453,23 @@ df_tga |>
   theme_classic() +
   labs(y = "Slope", title = "Leaf N:P") +
   geom_hline(yintercept = 1.0, linetype = "dotted") +
-  geom_hline(yintercept = 0.0)
+  geom_hline(yintercept = 0.0) +
+  khroma::scale_fill_discreterainbow() +
+  theme(axis.text.y = element_text(face = "italic"))
 
+gg_slopes_species_np
 ggsave(paste0(here::here(), "/fig/tga_slopes_bars_leafnp_species.pdf"), width = 7, height = 7)
 
+midrow <- cowplot::plot_grid(gg_slopes, gg_ranges, labels = c("d", "e"), ncol = 2)
+midrow
+ggsave(paste0(here::here(), "/fig/tga_log_mid.pdf"), width = 12, height = 4)
+
+bottomrow <- cowplot::plot_grid(gg_slopes_species_n, gg_slopes_species_p, gg_slopes_species_np, labels = c("f", "g", "h"), ncol = 3, rel_widths = c(0.65, 0.65, 1))
+bottomrow
+ggsave(paste0(here::here(), "/fig/tga_log_bottom.pdf"), width = 12, height = 5)
+
+plot_grid(toprow, midrow, bottomrow, nrow = 3, rel_heights = c(0.7, 0.5, 1.1))
+ggsave(paste0(here::here(), "/fig/tga_log_all.pdf"), width = 12, height = 13)
 ```
 
 ### Correlations of slopes and ranges
@@ -422,4 +506,108 @@ df_tga |>
   ggplot(aes(range_n, range_p)) +
   geom_point()
 
+```
+
+## Log TGA with RF predictions
+
+Add predictions from the RF model. Column `pred` contains predictions.
+```{r}
+filn <- paste0(here::here(), "/data/mod_rf_caret_leafn.rds")  # created with model_fitting.Rmd
+mod_rf_caret_leafn <- readRDS(filn)
+
+filn <- paste0(here::here(), "/data/dfs_leafnp_20210729.rds")
+dfs <- readRDS(filn)
+
+# get predicted values from cross-validation resamples
+dfs_pred <- mod_rf_caret_leafn$pred %>% 
+  as_tibble() %>% 
+  dplyr::filter(mtry == mod_rf_caret_leafn$bestTune$mtry, 
+                splitrule == mod_rf_caret_leafn$bestTune$splitrule, 
+                min.node.size == mod_rf_caret_leafn$bestTune$min.node.size) %>%
+  separate(Resample, into = c(NA, "Fold"), sep = "old") %>% 
+  dplyr::rename(idx = rowIndex) |> 
+  
+  # combine to get site name
+  left_join(
+    dfs |> 
+      mutate(idx = 1:nrow(dfs)),
+    by = "idx"
+    ) |> 
+  
+  # retain only site name and predicted
+  select(sitename, pred)
+
+# add predicted values to full data frame
+df_rf <- df |> 
+  left_join(
+    dfs_pred,
+    by = "sitename"
+  )
+  
+```
+
+Treat `pred` like site-mean values in "classic" TGA.
+```{r}
+# N
+gg1 <- df_rf %>% 
+  dplyr::filter(Species %in% use_species & sitename %in% use_sites) %>% 
+  drop_na(leafN_sitemean, pred) |> 
+  group_by(Species) %>% 
+  ggplot(aes(x = pred, y = leafN, group = Species)) +
+  geom_smooth(method = "lm", se = FALSE, size = 0.1, alpha = 0.2, colour = cols[1]) +
+  geom_abline(intercept=0, slope=1, linetype="dotted") +
+  theme_classic() +
+  # xlim(0.7, 1.8) + ylim(0.7, 1.8) +
+  # coord_equal() +
+  labs(x = expression(paste("Predicted leaf N")), y = expression(paste("Leaf N")), title = "Leaf N")
+gg1
+```
+
+### Analysis of slopes
+
+Fit linear regressions by species.
+```{r}
+df_tga2 <- df_rf %>% 
+  dplyr::filter(Species %in% use_species & sitename %in% use_sites) %>% 
+  group_by(Species) %>% 
+  nest() %>% 
+  mutate(linmod_n  = purrr::map(data, ~lm(leafN  ~ pred,  data = ., x = TRUE))
+         # linmod_p  = purrr::map(data, ~lm(log_leafP  ~ log_leafP_sitemean,  data = ., x = TRUE)),
+         # linmod_np = purrr::map(data, ~lm(log_leafNP ~ log_leafNP_sitemean, data = ., x = TRUE))
+         ) %>% 
+  mutate(slope_n  = purrr::map_dbl(linmod_n,  ~coef(.)[2]),
+         # slope_p  = purrr::map_dbl(linmod_p,  ~coef(.)[2]),
+         # slope_np = purrr::map_dbl(linmod_np, ~coef(.)[2]),
+         
+         range_n  = purrr::map(linmod_n,  "x")
+         # range_p  = purrr::map(linmod_p,  "x"),
+         # range_np = purrr::map(linmod_np, "x")
+         ) %>% 
+  mutate(range_n  = purrr::map_dbl(range_n,  ~diff(range(.)))
+         # range_p  = purrr::map_dbl(range_p,  ~diff(range(.))),
+         # range_np = purrr::map_dbl(range_np, ~diff(range(.)))
+         ) |> 
+  left_join(df_rf %>% 
+              dplyr::select(Family, Genus, Species) %>% 
+              distinct(), 
+            by = "Species")
+  
+  # # remove outlier in slope P
+  # filter(slope_p > -5 & slope_p < 5)
+```
+
+
+```{r}
+df_tga2 %>% 
+  # pivot_longer(c(slope_n, slope_p, slope_np), values_to = "slope", names_to = "trait") |> 
+  # mutate(trait = factor(trait, level = c("slope_n", "slope_p", "slope_np"))) |> 
+  ggplot(aes(slope_n, ..density..)) +   # , color = trait, fill = trait
+  geom_density(alpha = 0.3) +
+  # khroma::scale_color_highcontrast(labels = c("N", "P", "N:P")) +
+  # khroma::scale_fill_highcontrast(labels = c("N", "P", "N:P")) +
+  xlim(-2,3) +
+  theme_classic() +
+  labs(x = "Slope", y = "Density") +
+  geom_vline(xintercept = 1, linetype = "dotted") +
+  theme(legend.title = element_blank())
 ```
