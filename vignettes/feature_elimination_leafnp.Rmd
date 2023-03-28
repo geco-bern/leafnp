@@ -46,60 +46,30 @@ df_vip <- read_csv(paste0(here::here(), "/data/df_vip_", target, ".csv"))
 With this, we can re-create the feature elimination, getting name of candidate predictor at each step ("level") for which, when dropped, the model still achieved the highest R2.
 
 ```{r}
-df_fe_summary_reconstr <- df_fe %>% 
-  group_by(level) %>% 
-  filter(rsq == max(rsq)) %>% 
-  drop_na(pred) %>% 
-  ungroup() %>% 
-  select(rsq, pred, step = level)
+# use this, df_fe_summary was accidentally overwritten. 
+df_fe_summary_reconstr <- df_fe |> 
+  group_by(level)|> 
+  filter(rsq == max(rsq)) |> 
+  ungroup()
+df_fe_summary_reconstr$pred[nrow(df_fe_summary_reconstr)] <- "ndep"
+df_fe_summary_reconstr$rsq[2:nrow(df_fe_summary_reconstr)] <- df_fe_summary_reconstr$rsq[1:(nrow(df_fe_summary_reconstr)-1)]
+df_fe_summary_reconstr$step <- 1:nrow(df_fe_summary_reconstr)
 
 all_equal(df_fe_summary, df_fe_summary_reconstr)
 ```
 
 `df_fe_summary` provides information about the updated R2 after respective variable was dropped.
 
-```{r}
-df_fe_summary %>% 
-  mutate(highlight = ifelse(pred == "pmonthmin", "yes", "no")) %>% 
-  mutate(step = rev(1:n())) %>%
-  mutate(pred = fct_reorder(pred, step)) %>%
-  ggplot(aes(pred, rsq, fill = highlight)) +
-  scale_fill_manual( values = c( "yes"="tomato", "no"="gray50" ), guide = FALSE ) +
-  geom_bar(stat = "identity") +
-  labs(x = "", y = expression(italic(R)^2)) +
-  coord_flip() +
-  theme_classic()
-
-ggsave(paste0(here::here(), "/fig/rsq_stepwise_leafN.pdf"), width = 6, height = 8)
-
-gga1 <- df_fe_summary %>% 
-  mutate(highlight = ifelse(pred == "pmonthmin", "yes", "no")) %>% 
-  mutate(step = rev(1:n())) %>%
-  mutate(pred = fct_reorder(pred, step)) %>%
-  tail(n = 13) %>% 
-  ggplot(aes(pred, rsq, fill = highlight)) +
-  scale_fill_manual(values = c( "yes"="tomato", "no"="gray50" ), guide = FALSE ) +
-  geom_bar(stat = "identity") +
-  labs(title = "Leaf N", x = "", y = expression(italic(R)^2)) +
-  coord_flip() +
-  theme_classic()
-
-gga1
-
-ggsave(paste0(here::here(), "/fig/rsq_stepwise_leafN_sub.pdf"), width = 6, height = 4)
-write_csv(df_fe_summary, file = paste0(here::here(), "/data/df_fe_summary_leafn.csv"))
-```
-
 This shows that there are negligible gains after ALSA (more generously after cwdx80). In other words, we might as well build a model with just the following predictors:
 ```{r}
-longlist <- df_fe_summary %>% 
+longlist <- df_fe_summary_reconstr %>% 
   slice((nrow(.)-11):nrow(.)) %>% 
   pull(pred) %>% 
   as.character()
 longlist
 
-shortlist <- df_fe_summary %>% 
-  slice((nrow(.)-8):nrow(.)) %>% 
+shortlist <- df_fe_summary_reconstr %>% 
+  slice((nrow(.)-6):nrow(.)) %>% 
   pull(pred) %>% 
   as.character()
 shortlist
@@ -107,6 +77,38 @@ shortlist
 saveRDS(shortlist, file = paste0(here::here(), "/data/shortlist_", target, ".rds"))
 saveRDS(longlist, file = paste0(here::here(), "/data/longlist_", target, ".rds"))
 ```
+
+```{r}
+df_fe_summary_reconstr %>% 
+  mutate(highlight = ifelse(pred %in% shortlist, "yes", "no")) %>% 
+  mutate(pred = fct_reorder(pred, rev(step))) %>%
+  ggplot(aes(pred, rsq, fill = highlight)) +
+  scale_fill_manual( values = c( "yes"="#29a274ff", "no"="#777055ff" ), guide = FALSE ) +
+  geom_bar(stat = "identity") +
+  labs(x = "", y = expression(italic(R)^2)) +
+  scale_y_continuous(expand = c(0, 0)) +
+  coord_flip() +
+  theme_classic()
+
+ggsave(paste0(here::here(), "/fig/rsq_stepwise_leafN.pdf"), width = 6, height = 8)
+
+gga1 <- df_fe_summary_reconstr %>% 
+  mutate(highlight = ifelse(pred %in% shortlist, "yes", "no")) %>% 
+  mutate(pred = fct_reorder(pred, rev(step))) %>%
+  tail(n = 13) %>% 
+  ggplot(aes(pred, rsq, fill = highlight)) +
+  scale_fill_manual(values = c( "yes"="#29a274ff", "no"="#777055ff" ), guide = FALSE ) +
+  geom_bar(stat = "identity") +
+  labs(title = "Leaf N", x = "", y = expression(italic(R)^2)) +
+  scale_y_continuous(expand = c(0, 0)) +
+  coord_flip() +
+  theme_classic()
+
+gga1
+ggsave(paste0(here::here(), "/fig/rsq_stepwise_leafN_sub.pdf"), width = 6, height = 4)
+saveRDS(gga1, file = paste0(here::here(), "/data/gga1.rds"))
+```
+
 
 ### Train final model
 
@@ -599,34 +601,20 @@ df_vip <- read_csv(paste0(here::here(), "/data/df_vip_", target, ".csv"))
 ```
 
 ```{r}
-df_fe_summary %>% 
-  mutate(pred = fct_reorder(pred, step)) %>%
-  mutate(highlight = ifelse(pred == "pmonthmin", "yes", "no")) %>% 
-  ggplot(aes(pred, rsq, fill = highlight)) +
-  scale_fill_manual( values = c( "yes"="tomato", "no"="gray50" ), guide = FALSE ) +
-  geom_bar(stat = "identity") +
-  labs(x = "", y = expression(italic(R)^2)) +
-  coord_flip() +
-  theme_classic()
+# use this, df_fe_summary was accidentally overwritten. 
+df_fe_summary_reconstr <- df_fe |> 
+  group_by(level)|> 
+  filter(rsq == max(rsq)) |> 
+  ungroup()
+df_fe_summary_reconstr$pred[nrow(df_fe_summary_reconstr)] <- "ndep"
+df_fe_summary_reconstr$rsq[2:nrow(df_fe_summary_reconstr)] <- df_fe_summary_reconstr$rsq[1:(nrow(df_fe_summary_reconstr)-1)]
+df_fe_summary_reconstr$step <- 1:nrow(df_fe_summary_reconstr)
 
-ggsave(paste0(here::here(), "/fig/rsq_stepwise_leafP.pdf"), width = 6, height = 8)
+all_equal(df_fe_summary, df_fe_summary_reconstr)
 
-gga2 <- df_fe_summary %>% 
-  mutate(pred = fct_reorder(pred, step)) %>%
-  mutate(highlight = ifelse(pred == "pmonthmin", "yes", "no")) %>% 
-  tail(n = 13) %>% 
-  ggplot(aes(pred, rsq, fill = highlight)) +
-  scale_fill_manual( values = c( "yes"="tomato", "no"="gray50" ), guide = FALSE ) +
-  geom_bar(stat = "identity") +
-  labs(title = "Leaf P", x = "", y = expression(italic(R)^2)) +
-  coord_flip() +
-  theme_classic()
-
-gga2
-ggsave(paste0(here::here(), "/fig/rsq_stepwise_leafP_sub.pdf"), width = 6, height = 4)
-write_csv(df_fe_summary, file = paste0(here::here(), "/data/df_fe_summary_leafp.csv"))
+tail(df_fe_summary)
+tail(df_fe_summary_reconstr)
 ```
-
 
 This shows that there are negligible gains after `"pmonthmin"`. In other words, we might as well build a model with just the following predictors:
 ```{r}
@@ -643,6 +631,37 @@ shortlist <- df_fe_summary %>%
   as.character()
 shortlist
 saveRDS(shortlist, file = paste0(here::here(), "/data/shortlist_", target, ".rds"))
+```
+
+```{r}
+df_fe_summary %>% 
+  mutate(pred = fct_reorder(pred, step)) %>%
+  mutate(highlight = ifelse(pred %in% shortlist, "yes", "no")) %>% 
+  ggplot(aes(pred, rsq, fill = highlight)) +
+  scale_fill_manual( values = c( "yes"="#29a274ff", "no"="#777055ff" ), guide = FALSE ) +
+  geom_bar(stat = "identity") +
+  labs(x = "", y = expression(italic(R)^2)) +
+  scale_y_continuous(expand = c(0, 0)) +
+  coord_flip() +
+  theme_classic()
+
+ggsave(paste0(here::here(), "/fig/rsq_stepwise_leafP.pdf"), width = 6, height = 8)
+
+gga2 <- df_fe_summary %>% 
+  mutate(pred = fct_reorder(pred, step)) %>%
+  mutate(highlight = ifelse(pred %in% shortlist, "yes", "no")) %>% 
+  tail(n = 13) %>% 
+  ggplot(aes(pred, rsq, fill = highlight)) +
+  scale_fill_manual( values = c( "yes"="#29a274ff", "no"="#777055ff" ), guide = FALSE ) +
+  geom_bar(stat = "identity") +
+  labs(title = "Leaf P", x = "", y = expression(italic(R)^2)) +
+  scale_y_continuous(expand = c(0, 0)) +
+  coord_flip() +
+  theme_classic()
+
+gga2
+ggsave(paste0(here::here(), "/fig/rsq_stepwise_leafP_sub.pdf"), width = 6, height = 4)
+saveRDS(gga2, file = paste0(here::here(), "/data/gga2.rds"))
 ```
 
 ### Train final model
@@ -734,34 +753,20 @@ df_fe <- read_csv(paste0(here::here(), "/data/df_fe_", target, ".csv"))
 df_vip <- read_csv(paste0(here::here(), "/data/df_vip_", target, ".csv"))
 ```
 
-
 ```{r}
-df_fe_summary %>% 
-  mutate(pred = fct_reorder(pred, step)) %>%
-  mutate(highlight = ifelse(pred == "map", "yes", "no")) %>% 
-  ggplot(aes(pred, rsq, fill = highlight)) +
-  scale_fill_manual( values = c( "yes"="tomato", "no"="gray50" ), guide = FALSE ) +
-  geom_bar(stat = "identity") +
-  labs(x = "", y = expression(italic(R)^2)) +
-  coord_flip() +
-  theme_classic()
+# use this, df_fe_summary was accidentally overwritten. 
+df_fe_summary_reconstr <- df_fe |> 
+  group_by(level)|> 
+  filter(rsq == max(rsq)) |> 
+  ungroup()
+df_fe_summary_reconstr$pred[nrow(df_fe_summary_reconstr)] <- "co2"
+df_fe_summary_reconstr$rsq[2:nrow(df_fe_summary_reconstr)] <- df_fe_summary_reconstr$rsq[1:(nrow(df_fe_summary_reconstr)-1)]
+df_fe_summary_reconstr$step <- 1:nrow(df_fe_summary_reconstr)
 
-ggsave(paste0(here::here(), "/fig/rsq_stepwise_leafNP.pdf"), width = 6, height = 8)
+all_equal(df_fe_summary, df_fe_summary_reconstr)
 
-gga3 <- df_fe_summary %>% 
-  mutate(pred = fct_reorder(pred, step)) %>%
-  mutate(highlight = ifelse(pred == "map", "yes", "no")) %>% 
-  tail(n = 13) %>% 
-  ggplot(aes(pred, rsq, fill = highlight)) +
-  scale_fill_manual( values = c( "yes"="tomato", "no"="gray50" ), guide = FALSE ) +
-  geom_bar(stat = "identity") +
-  labs(title = "Leaf N:P", x = "", y = expression(italic(R)^2)) +
-  coord_flip() +
-  theme_classic()
-
-gga3
-ggsave(paste0(here::here(), "/fig/rsq_stepwise_leafNP_sub.pdf"), width = 6, height = 4)
-write_csv(df_fe_summary, file = paste0(here::here(), "/data/df_fe_summary_leafnp.csv"))
+tail(df_fe_summary)
+tail(df_fe_summary_reconstr)
 ```
 
 This shows that there are negligible gains after `"cwdx80"`. In other words, we might as well build a model with just the following predictors:
@@ -780,6 +785,38 @@ shortlist <- df_fe_summary %>%
 shortlist
 saveRDS(shortlist, file = paste0(here::here(), "/data/shortlist_", target, ".rds"))
 ```
+
+```{r}
+df_fe_summary %>% 
+  mutate(pred = fct_reorder(pred, step)) %>%
+  mutate(highlight = ifelse(pred %in% shortlist, "yes", "no")) %>% 
+  ggplot(aes(pred, rsq, fill = highlight)) +
+  scale_fill_manual( values = c( "yes"="#29a274ff", "no"="#777055ff" ), guide = FALSE ) +
+  geom_bar(stat = "identity") +
+  labs(x = "", y = expression(italic(R)^2)) +
+  scale_y_continuous(expand = c(0, 0)) +
+  coord_flip() +
+  theme_classic()
+
+ggsave(paste0(here::here(), "/fig/rsq_stepwise_leafNP.pdf"), width = 6, height = 8)
+
+gga3 <- df_fe_summary %>% 
+  mutate(pred = fct_reorder(pred, step)) %>%
+  mutate(highlight = ifelse(pred %in% shortlist, "yes", "no")) %>% 
+  tail(n = 13) %>% 
+  ggplot(aes(pred, rsq, fill = highlight)) +
+  scale_fill_manual( values = c( "yes"="#29a274ff", "no"="#777055ff" ), guide = FALSE ) +
+  geom_bar(stat = "identity") +
+  labs(title = "Leaf N:P", x = "", y = expression(italic(R)^2)) +
+  scale_y_continuous(expand = c(0, 0)) +
+  coord_flip() +
+  theme_classic()
+
+gga3
+ggsave(paste0(here::here(), "/fig/rsq_stepwise_leafNP_sub.pdf"), width = 6, height = 4)
+saveRDS(gga3, file = paste0(here::here(), "/data/gga3.rds"))
+```
+
 
 ### Train final model
 

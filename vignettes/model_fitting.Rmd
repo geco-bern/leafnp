@@ -159,7 +159,7 @@ filn <- paste0(here::here(), "/data/mod_rf_caret_leafn_species.rds")
 
 if (file.exists(filn) && !overwrite){
   
-  mod_rf_caret_leafn <- readRDS(filn)
+  mod_rf_caret_leafn_species <- readRDS(filn)
   
 } else {
   
@@ -245,7 +245,7 @@ filn <- paste0(here::here(), "/data/mod_rf_caret_leafn_species_phylo.rds")
 
 if (file.exists(filn) && !overwrite){
   
-  mod_rf_caret_leafn <- readRDS(filn)
+  mod_rf_caret_leafn_species_phylo <- readRDS(filn)
   
 } else {
   
@@ -320,7 +320,7 @@ shortlist <- readRDS(paste0(here::here(), "/data/shortlist_", target, ".rds"))
 #### LMM
 
 ```{r}
-mod_lmm_leafn <- lme(
+mod_lmm_leafp <- lme(
 
   as.formula(paste("log(", target,") ~ ", paste(shortlist, collapse = " + "))),
   random = ~1|SP,
@@ -330,7 +330,7 @@ mod_lmm_leafn <- lme(
   )
 
 # This is new released July 21 2021 with many indicators
-tmp <- model_performance(mod_lmm_leafn, metrics = "common", verbose = TRUE)
+tmp <- model_performance(mod_lmm_leafp, metrics = "common", verbose = TRUE)
 print(tmp)
 
 # collect results into df
@@ -364,7 +364,7 @@ filn <- paste0(here::here(), "/data/mod_rf_caret_leafp_species.rds")
 
 if (file.exists(filn) && !overwrite){
   
-  mod_rf_caret_leafp <- readRDS(filn)
+  mod_rf_caret_leafp_species <- readRDS(filn)
   
 } else {
   
@@ -461,7 +461,7 @@ filn <- paste0(here::here(), "/data/mod_rf_caret_leafp_species_phylo.rds")
 
 if (file.exists(filn) && !overwrite){
   
-  mod_rf_caret_leafp <- readRDS(filn)
+  mod_rf_caret_leafp_species_phylo <- readRDS(filn)
   
 } else {
   
@@ -531,7 +531,7 @@ shortlist <- readRDS(paste0(here::here(), "/data/shortlist_", target, ".rds"))
 #### LMM
 
 ```{r}
-mod_lmm_leafn <- lme(
+mod_lmm_leafnp <- lme(
 
   as.formula(paste("log(", target,") ~ ", paste(shortlist, collapse = " + "))),
   random = ~1|SP,
@@ -541,7 +541,7 @@ mod_lmm_leafn <- lme(
 
 
 # This is new released July 21 2021 with many indicators
-tmp <- model_performance(mod_lmm_leafn, metrics = "common", verbose = TRUE)
+tmp <- model_performance(mod_lmm_leafnp, metrics = "common", verbose = TRUE)
 print(tmp)
 
 # collect results into df
@@ -575,7 +575,7 @@ filn <- paste0(here::here(), "/data/mod_rf_caret_leafnp_species.rds")
 
 if (file.exists(filn) && !overwrite){
   
-  mod_rf_caret_leafnp <- readRDS(filn)
+  mod_rf_caret_leafnp_species <- readRDS(filn)
   
 } else {
   
@@ -647,7 +647,7 @@ filn <- paste0(here::here(), "/data/mod_rf_caret_leafnp_species_phylo.rds")
 
 if (file.exists(filn) && !overwrite){
   
-  mod_rf_caret_leafnp <- readRDS(filn)
+  mod_rf_caret_leafnp_species_phylo <- readRDS(filn)
   
 } else {
   
@@ -756,7 +756,7 @@ shortlist <- readRDS(paste0(here::here(), "/data/shortlist_", target, ".rds"))
 mod_lm_leafn <- lm(
 
   as.formula(paste("log(", target,") ~ ", paste(shortlist, collapse = " + "))),
-  data = dplyr::select(df_lmm, leafN, all_of(shortlist)) %>% drop_na()
+  data = dplyr::select(dfs, leafN, all_of(shortlist)) %>% drop_na()
 
   )
 
@@ -873,7 +873,7 @@ shortlist <- readRDS(paste0(here::here(), "/data/shortlist_", target, ".rds"))
 mod_lm_leafn <- lm(
 
   as.formula(paste("log(", target,") ~ ", paste(shortlist, collapse = " + "))),
-  data = dplyr::select(df_lmm, leafP, all_of(shortlist)) %>% drop_na()
+  data = dplyr::select(dfs, leafP, all_of(shortlist)) %>% drop_na()
 
   )
 
@@ -990,7 +990,7 @@ shortlist <- readRDS(paste0(here::here(), "/data/shortlist_", target, ".rds"))
 mod_lm_leafn <- lm(
 
   as.formula(paste("log(", target,") ~ ", paste(shortlist, collapse = " + "))),
-  data = dplyr::select(df_lmm, LeafNP, all_of(shortlist)) %>% drop_na()
+  data = dplyr::select(dfs, LeafNP, all_of(shortlist)) %>% drop_na()
 
   )
 
@@ -1189,17 +1189,13 @@ saveRDS(gg3, file = paste0(here::here(), "/data/gg3.rds"))
 write_csv(df_cv, file = paste0(here::here(), "/data/df_cv_leafnp.csv"))
 ```
 
-## Morphoclimatic groups
+## Aggregated to ecoregions
 
-### Get data
-
-Extract biome information from WWF and NCRS biome map.
-```{r eval=FALSE}
-filn <- paste0(here::here(), "/data/dfs_morphoclim.rds")
+Add ecoregion name to site-level data
+```{r}
+filn <- paste0(here::here(), "/data/df_ecoregion.rds")
 
 if (!file.exists(filn)){
-
-  df_biome_id <- read_csv(paste0(here::here(), "/data/biome_id.csv"))
 
   ## add WWF biome info
   dfs_wwf <- ingestr::ingest(
@@ -1211,69 +1207,74 @@ if (!file.exists(filn)){
     )|> 
     mutate(data = purrr::map(data, ~slice(., 1)))|> 
     unnest(data) |> 
-    select(sitename, biome_wwf = BIOME_NAME) |> 
-    left_join(df_biome_id, by = "biome_wwf") |> 
+    rename(biome_wwf = BIOME_NAME) |> 
+    # left_join(df_biome_id, by = "biome_wwf") |> 
     right_join(dfs, by = "sitename")
-  
-  saveRDS(dfs_wwf, file = filn)
   
 } else {
   dfs_wwf <- readRDS(filn)
 }
-```
 
-Consider only biomes with enough data (N > 100).
-```{r}
-use_biomes <- dfs_wwf |> 
-  group_by(mybiome) |> 
-  summarise(n = n()) |> 
-  filter(n > 100) |> 
-  pull(mybiome)
-```
-
-Subset.
-```{r}
-df_wwf_sub <- dfs_wwf |> 
-  filter(mybiome %in% use_biomes) |> 
-  ungroup()
-```
-
-### Number of species per biome
-
-Analyse number of distinct species by biome.
-```{r}
-df |> 
-  left_join(
-    select(df_wwf_sub, sitename, mybiome),
-    by = "sitename"
-  ) |> 
-  select(mybiome, Species) |> 
+df_wwf <- dfs_wwf |> 
+  select(sitename, ECO_NAME) |> 
   distinct() |> 
-  group_by(mybiome) |> 
+  right_join(
+    df, 
+    by = "sitename"
+  )
+
+
+use_ecoregions <- df_wwf |> 
+  group_by(ECO_NAME) |> 
   summarise(n = n()) |> 
   arrange(desc(n)) |> 
-  drop_na()
+  filter(n > 30) |> 
+  drop_na() |> 
+  pull(ECO_NAME)
 
-# just boreal
-df |> 
-  left_join(
-    select(df_wwf_sub, sitename, mybiome),
-    by = "sitename"
-  ) |> 
-  filter(mybiome == "Boreal") |> 
-  group_by(Species) |> 
-  summarise(n = n()) |> 
-  arrange(desc(n))
+df_wwf <- df_wwf |> 
+  filter(ECO_NAME %in% use_ecoregions) |> 
+  group_by(ECO_NAME) %>%
+  summarise(across(c(preds, trgts), ~(mean(.x, na.rm = TRUE))))
 ```
 
-
-### Fit model
+### Leaf N
 
 ```{r}
 target <- "leafN"
 shortlist <- readRDS(paste0(here::here(), "/data/shortlist_", target, ".rds"))
+```
 
-filn <- paste0(here::here(), "/data/mod_rf_caret_leafn_morphoclim.rds")
+#### LM
+
+```{r}
+mod_lm_leafn <- lm(
+
+  as.formula(paste("log(", target,") ~ ", paste(shortlist, collapse = " + "))),
+  data = dplyr::select(df_wwf, leafN, all_of(shortlist)) %>% drop_na()
+
+  )
+
+
+# This is new released July 21 2021 with many indicators
+tmp <- model_performance(mod_lm_leafn, metrics = "common", verbose = TRUE)
+print(tmp)
+
+# collect results into df
+addrow <- tibble(target = target,
+                 scale = "ecoregions",
+                 model = "LM",
+                 pred = "combined",
+                 rsq = tmp$R2,
+                 rmse = tmp$RMSE)
+df_model_fitting <- df_model_fitting %>% 
+  bind_rows(addrow)
+```
+
+#### Random Forest
+
+```{r}
+filn <- paste0(here::here(), "/data/mod_rf_caret_leafn_ecoregions.rds")
 
 if (file.exists(filn) && !overwrite){
   
@@ -1281,22 +1282,12 @@ if (file.exists(filn) && !overwrite){
   
 } else {
  
-  ## one-hot encoding for Species identity (warning: 3700 species)
-  df1h <- df_wwf_sub %>% 
-    recipe(leafN ~ ., 
-           data = dplyr::select(df_wwf_sub, 
-                                leafN, 
-                                all_of(c(shortlist, "mybiome")))) %>% 
-    step_dummy(mybiome, one_hot = TRUE) %>% 
-    prep(training = df_wwf_sub, retain = TRUE) %>% 
-    juice()
- 
   ## create generic formula for the model and define preprocessing steps
-  pp <- recipe(leafN ~ ., data = df1h) %>%
+  pp <- recipe(leafN ~ ., data = dplyr::select(df_wwf, leafN, all_of(shortlist))) %>%
   
     ## impute by median as part of the recipe
+    # step_medianimpute(all_predictors())
     step_impute_median(all_predictors())
-
 
   traincotrlParams <- trainControl( 
     method = "cv", 
@@ -1306,29 +1297,20 @@ if (file.exists(filn) && !overwrite){
     )
   
   ## best choice
-  tune_grid <- expand.grid( .mtry = floor((ncol(df1h)-1) / 3),
+  tune_grid <- expand.grid( .mtry = 3,
                             .min.node.size = 5,
                             .splitrule = "variance"
                             )
-  
-#   min.node.size  RMSE      Rsquared   MAE     
-#    5             4.845727  0.4556901  3.474374
-#   10             4.879364  0.4486083  3.499563
-#   20             4.924898  0.4388536  3.532184
-#   30             4.961296  0.4310342  3.564307
-#   50             5.021667  0.4177730  3.607971
-# 
-# Tuning parameter 'mtry' was held constant at a value of 5
-# Tuning parameter 'splitrule'
-#  was held constant at a value of variance
-# RMSE was used to select the optimal model using the smallest value.
-# The final values used for the model were mtry = 5, splitrule = variance and min.node.size = 3.
 
+# Tuning parameter 'splitrule' was held constant at a value of variance
+# RMSE was used to select the optimal model using the smallest value.
+# The final values used for the model were mtry = 3, splitrule = variance and min.node.size = 5.
+  
   set.seed(1982)
   
-  mod_rf_caret_leafn_morphoclim <- train(
+  mod_rf_caret_leafn <- train(
     pp,
-    data            = df1h,
+    data            = dplyr::select(df_wwf, leafN, all_of(shortlist)),
     metric          = "RMSE",
     method          = "ranger",
     tuneGrid        = tune_grid,
@@ -1339,20 +1321,581 @@ if (file.exists(filn) && !overwrite){
     importance      = "impurity"   # for variable importance analysis, alternative: "permutation"
     )
   
-  saveRDS(mod_rf_caret_leafn_morphoclim, file = filn)
+  mod_rf_caret_leafn
   
-} else {
-  
-  mod_rf_caret_leafn_morphoclim <- readRDS(filn)
-  
+  saveRDS(mod_rf_caret_leafn, file = filn)
 }
 
-# model results
-mod_rf_caret_leafn_morphoclim
+# collect results into df
+addrow <- tibble(target = target,
+                 scale = "ecoregions",
+                 model = "RF",
+                 pred = "combined",
+                 rsq = mod_rf_caret_leafn$results[["Rsquared"]],
+                 rmse = mod_rf_caret_leafn$results[["RMSE"]])
+df_model_fitting <- df_model_fitting %>% 
+  bind_rows(addrow)
+```
+
+
+
+<!-- ## Morphoclimatic groups -->
+
+<!-- ### Get data -->
+
+<!-- Extract biome information from WWF and NCRS biome map. -->
+<!-- ```{r eval=FALSE} -->
+<!-- filn <- paste0(here::here(), "/data/dfs_morphoclim.rds") -->
+
+<!-- if (!file.exists(filn)){ -->
+
+<!--   df_biome_id <- read_csv(paste0(here::here(), "/data/biome_id.csv")) -->
+
+<!--   ## add WWF biome info -->
+<!--   dfs_wwf <- ingestr::ingest( -->
+<!--     dfs|>  -->
+<!--       dplyr::select(sitename, lon, lat), -->
+<!--     source = "wwf", -->
+<!--     dir = "~/data/biomes/wwf_ecoregions/official/", -->
+<!--     settings = list(layer = "wwf_terr_ecos") -->
+<!--     )|>  -->
+<!--     mutate(data = purrr::map(data, ~slice(., 1)))|>  -->
+<!--     unnest(data) |>  -->
+<!--     rename(biome_wwf = BIOME_NAME) |>  -->
+<!--     left_join(df_biome_id, by = "biome_wwf") |>  -->
+<!--     right_join(dfs, by = "sitename") -->
+
+<!--   saveRDS(dfs_wwf, file = filn) -->
+
+<!-- } else { -->
+<!--   dfs_wwf <- readRDS(filn) -->
+<!-- } -->
+<!-- ``` -->
+
+<!-- Consider only biomes with enough data (N > 100). -->
+<!-- ```{r} -->
+<!-- use_biomes <- dfs_wwf |>  -->
+<!--   group_by(mybiome) |>  -->
+<!--   summarise(n = n()) |>  -->
+<!--   filter(n > 100) |>  -->
+<!--   pull(mybiome) -->
+<!-- ``` -->
+
+<!-- Subset. -->
+<!-- ```{r} -->
+<!-- df_wwf_sub <- dfs_wwf |>  -->
+<!--   filter(mybiome %in% use_biomes) |>  -->
+<!--   ungroup() -->
+<!-- ``` -->
+
+<!-- ### Number of species per biome -->
+
+<!-- Analyse number of distinct species by biome. -->
+<!-- ```{r} -->
+<!-- df |>  -->
+<!--   left_join( -->
+<!--     select(df_wwf_sub, sitename, mybiome), -->
+<!--     by = "sitename" -->
+<!--   ) |>  -->
+<!--   select(mybiome, Species) |>  -->
+<!--   distinct() |>  -->
+<!--   group_by(mybiome) |>  -->
+<!--   summarise(n = n()) |>  -->
+<!--   arrange(desc(n)) |>  -->
+<!--   drop_na() -->
+
+<!-- # just boreal -->
+<!-- df |>  -->
+<!--   left_join( -->
+<!--     select(df_wwf_sub, sitename, mybiome), -->
+<!--     by = "sitename" -->
+<!--   ) |>  -->
+<!--   filter(mybiome == "Boreal") |>  -->
+<!--   group_by(Species) |>  -->
+<!--   summarise(n = n()) |>  -->
+<!--   arrange(desc(n)) -->
+<!-- ``` -->
+
+
+<!-- ### Fit model -->
+
+<!-- ```{r} -->
+<!-- target <- "leafN" -->
+<!-- shortlist <- readRDS(paste0(here::here(), "/data/shortlist_", target, ".rds")) -->
+
+<!-- filn <- paste0(here::here(), "/data/mod_rf_caret_leafn_morphoclim.rds") -->
+
+<!-- if (file.exists(filn) && !overwrite){ -->
+
+<!--   mod_rf_caret_leafn_morphoclim <- readRDS(filn) -->
+
+<!-- } else { -->
+
+<!--   ## one-hot encoding for Species identity (warning: 3700 species) -->
+<!--   df1h <- df_wwf_sub %>%  -->
+<!--     recipe(leafN ~ .,  -->
+<!--            data = dplyr::select(df_wwf_sub,  -->
+<!--                                 leafN,  -->
+<!--                                 all_of(c(shortlist, "mybiome")))) %>%  -->
+<!--     step_dummy(mybiome, one_hot = TRUE) %>%  -->
+<!--     prep(training = df_wwf_sub, retain = TRUE) %>%  -->
+<!--     juice() -->
+
+<!--   ## create generic formula for the model and define preprocessing steps -->
+<!--   pp <- recipe(leafN ~ ., data = df1h) %>% -->
+
+<!--     ## impute by median as part of the recipe -->
+<!--     step_impute_median(all_predictors()) -->
+
+
+<!--   traincotrlParams <- trainControl(  -->
+<!--     method = "cv",  -->
+<!--     number = 5,  -->
+<!--     verboseIter = FALSE, -->
+<!--     savePredictions = "final" -->
+<!--     ) -->
+
+<!--   ## best choice -->
+<!--   tune_grid <- expand.grid( .mtry = floor((ncol(df1h)-1) / 3), -->
+<!--                             .min.node.size = 5, -->
+<!--                             .splitrule = "variance" -->
+<!--                             ) -->
+
+<!-- #   RMSE      Rsquared   MAE      -->
+<!-- #   4.864925  0.4511468  3.486146 -->
+<!-- #  -->
+<!-- # Tuning parameter 'mtry' was held constant at a value of 5 -->
+<!-- # Tuning parameter 'splitrule' was held constant at -->
+<!-- #  a value of variance -->
+<!-- # Tuning parameter 'min.node.size' was held constant at a value of 5 -->
+<!-- #   set.seed(1982) -->
+
+<!--   mod_rf_caret_leafn_morphoclim <- train( -->
+<!--     pp, -->
+<!--     data            = df1h, -->
+<!--     metric          = "RMSE", -->
+<!--     method          = "ranger", -->
+<!--     tuneGrid        = tune_grid, -->
+<!--     trControl       = traincotrlParams, -->
+<!--     replace         = TRUE, -->
+<!--     sample.fraction = 0.5, -->
+<!--     num.trees       = 2000,        # boosted for the final model -->
+<!--     importance      = "impurity"   # for variable importance analysis, alternative: "permutation" -->
+<!--     ) -->
+
+<!--   saveRDS(mod_rf_caret_leafn_morphoclim, file = filn) -->
+
+<!-- } -->
+
+<!-- # model results -->
+<!-- mod_rf_caret_leafn_morphoclim -->
+<!-- ``` -->
+
+## Within-species variations only
+
+```{r}
+use_species <- df |>
+  group_by(Species) |> 
+  summarise(n = n()) |>
+  arrange(desc(n)) |> 
+  filter(n > 5) |> 
+  pull(Species)
+
+df_species <- df |>
+  
+  # subset
+  filter(Species %in% use_species) |> 
+  dplyr::select(all_of(c("sitename", "Species", "leafN", "leafP", "LeafNP"))) |> 
+
+  # fit linear regressions by species
+  group_by(Species) |> 
+  summarise(across(all_of(c("leafN", "leafP", "LeafNP")), mean)) |> 
+  rename(leafN_mean = leafN, leafP_mean = leafP, leafNP_mean = LeafNP)
+
+df_species_mean <- df_species |> 
+  ungroup() |> 
+  summarise(across(all_of(c("leafN_mean", "leafP_mean", "leafNP_mean")), mean))
+  
+df2 <- df |> 
+
+  # subset
+  filter(Species %in% use_species) |> 
+  
+  left_join(df_species, by = "Species") |> 
+  ungroup() |> 
+  mutate(leafN_diff = leafN - leafN_mean, 
+         leafP_diff = leafP - leafP_mean, 
+         leafNP_diff = LeafNP - leafNP_mean)
+```
+
+### Leaf N
+
+```{r}
+target <- "leafN"
+shortlist <- readRDS(paste0(here::here(), "/data/shortlist_", target, ".rds"))
+```
+
+#### LM
+
+```{r}
+mod_lm_leafn_within <- lm(
+
+  as.formula(paste("log( leafN_diff ) ~ ", paste(shortlist, collapse = " + "))),
+  data = dplyr::select(df2, leafN_diff, all_of(shortlist)) %>% drop_na()
+
+  )
+
+
+# This is new released July 21 2021 with many indicators
+tmp <- model_performance(mod_lm_leafn_within, metrics = "common", verbose = TRUE)
+print(tmp)
+
+# collect results into df
+addrow <- tibble(target = target,
+                 scale = "within",
+                 model = "LM",
+                 pred = "environment",
+                 rsq = tmp$R2,
+                 rmse = tmp$RMSE)
+df_model_fitting <- df_model_fitting %>% 
+  bind_rows(addrow)
+```
+
+#### Random Forest
+
+```{r}
+filn <- paste0(here::here(), "/data/mod_rf_caret_leafn_within.rds")
+
+if (file.exists(filn) && !overwrite){
+  
+  mod_rf_caret_leafn_within <- readRDS(filn)
+  
+} else {
+ 
+  ## create generic formula for the model and define preprocessing steps
+  pp <- recipe(leafN_diff ~ ., data = dplyr::select(df2, leafN_diff, all_of(shortlist))) %>%
+  
+    ## impute by median as part of the recipe
+    # step_medianimpute(all_predictors())
+    step_impute_median(all_predictors())
+
+  traincotrlParams <- trainControl( 
+    method = "cv", 
+    number = 5, 
+    verboseIter = FALSE,
+    savePredictions = "final"
+    )
+  
+  ## best choice
+  tune_grid <- expand.grid( .mtry = 3,
+                            .min.node.size = 8,
+                            .splitrule = "variance"
+                            )
+  
+#   mtry  min.node.size  RMSE      Rsquared   MAE     
+#   2      3             3.034099  0.2908401  1.954698
+#   2      5             3.030944  0.2915255  1.954106
+#   2      8             3.031705  0.2904935  1.955953
+#   2     10             3.032102  0.2899871  1.957563
+#   2     30             3.053492  0.2807764  1.975929
+#   3      3             3.032462  0.2918925  1.955163
+#   3      5             3.031750  0.2916066  1.955047
+#   3      8             3.030372  0.2914033  1.954893
+#   3     10             3.031725  0.2904056  1.956186
+#   3     30             3.048420  0.2826194  1.971113
+#   4      3             3.035259  0.2909028  1.956637
+#   4      5             3.033229  0.2911054  1.955840
+#   4      8             3.031759  0.2910232  1.955106
+#   4     10             3.031150  0.2908795  1.956275
+#   4     30             3.045470  0.2837563  1.969138
+#   5      3             3.035900  0.2907365  1.956152
+#   5      5             3.033462  0.2912024  1.955757
+#   5      8             3.032381  0.2909391  1.956735
+#   5     10             3.031754  0.2907095  1.956024
+#   5     30             3.044440  0.2841162  1.968234
+# 
+# Tuning parameter 'splitrule' was held constant at a value of variance
+# RMSE was used to select the optimal model using the smallest value.
+# The final values used for the model were mtry = 3, splitrule = variance and min.node.size = 8.
+  
+  set.seed(1982)
+  
+  mod_rf_caret_leafn_within <- train(
+    pp,
+    data            = dplyr::select(df2, leafN_diff, all_of(shortlist)),
+    metric          = "RMSE",
+    method          = "ranger",
+    tuneGrid        = tune_grid,
+    trControl       = traincotrlParams,
+    replace         = TRUE,
+    sample.fraction = 0.5,
+    num.trees       = 2000,        # boosted for the final model
+    importance      = "impurity"   # for variable importance analysis, alternative: "permutation"
+    )
+  
+  mod_rf_caret_leafn_within
+  
+  saveRDS(mod_rf_caret_leafn_within, file = filn)
+}
+
+# collect results into df
+addrow <- tibble(target = target,
+                 scale = "within",
+                 model = "RF",
+                 pred = "environment",
+                 rsq = mod_rf_caret_leafn_within$results[["Rsquared"]],
+                 rmse = mod_rf_caret_leafn_within$results[["RMSE"]])
+df_model_fitting <- df_model_fitting %>% 
+  bind_rows(addrow)
+```
+
+### Leaf P
+
+```{r}
+target <- "leafP"
+shortlist <- readRDS(paste0(here::here(), "/data/shortlist_", target, ".rds"))
+```
+
+#### LM
+
+```{r}
+mod_lm_leafp_within <- lm(
+
+  as.formula(paste("log( leafP_diff ) ~ ", paste(shortlist, collapse = " + "))),
+  data = dplyr::select(df2, leafP_diff, all_of(shortlist)) %>% drop_na()
+
+  )
+
+
+# This is new released July 21 2021 with many indicators
+tmp <- model_performance(mod_lm_leafp_within, metrics = "common", verbose = TRUE)
+print(tmp)
+
+# collect results into df
+addrow <- tibble(target = target,
+                 scale = "within",
+                 model = "LM",
+                 pred = "environment",
+                 rsq = tmp$R2,
+                 rmse = tmp$RMSE)
+df_model_fitting <- df_model_fitting %>% 
+  bind_rows(addrow)
+```
+
+#### Random Forest
+
+```{r}
+filn <- paste0(here::here(), "/data/mod_rf_caret_leafp_within.rds")
+
+if (file.exists(filn) && !overwrite){
+  
+  mod_rf_caret_leafp_within <- readRDS(filn)
+  
+} else {
+ 
+  ## create generic formula for the model and define preprocessing steps
+  pp <- recipe(leafP_diff ~ ., data = dplyr::select(df2, leafP_diff, all_of(shortlist))) %>%
+  
+    ## impute by median as part of the recipe
+    # step_medianimpute(all_predictors())
+    step_impute_median(all_predictors())
+
+  traincotrlParams <- trainControl( 
+    method = "cv", 
+    number = 5, 
+    verboseIter = FALSE,
+    savePredictions = "final"
+    )
+  
+  ## best choice
+  tune_grid <- expand.grid( .mtry = 3,
+                            .min.node.size = 3,
+                            .splitrule = "variance"
+                            )
+  
+#   mtry  min.node.size  RMSE       Rsquared   MAE      
+#   2      3             0.3810881  0.3084349  0.2415511
+#   2      5             0.3811464  0.3078083  0.2416437
+#   2      8             0.3817988  0.3051723  0.2419735
+#   2     10             0.3825964  0.3022465  0.2424457
+#   2     30             0.3879025  0.2861176  0.2465989
+#   3      3             0.3805937  0.3107140  0.2415331
+#   3      5             0.3807597  0.3095421  0.2415571
+#   3      8             0.3816104  0.3059920  0.2419929
+#   3     10             0.3817637  0.3052921  0.2421188
+#   3     30             0.3864996  0.2900589  0.2455509
+#   4      3             0.3809152  0.3098003  0.2418271
+#   4      5             0.3807967  0.3096323  0.2416590
+#   4      8             0.3812495  0.3074272  0.2419214
+#   4     10             0.3817831  0.3053258  0.2421721
+#   4     30             0.3860038  0.2912901  0.2451559
+#   5      3             0.3810601  0.3094426  0.2418946
+#   5      5             0.3810532  0.3089526  0.2418074
+#   5      8             0.3815404  0.3065569  0.2422402
+#   5     10             0.3818055  0.3053505  0.2422428
+#   5     30             0.3857816  0.2916508  0.2449964
+# 
+# Tuning parameter 'splitrule' was held constant at a value of variance
+# RMSE was used to select the optimal model using the smallest value.
+# The final values used for the model were mtry = 3, splitrule = variance and min.node.size = 3.  
+  
+  set.seed(1982)
+  
+  mod_rf_caret_leafp_within <- train(
+    pp,
+    data            = dplyr::select(df2, leafP_diff, all_of(shortlist)),
+    metric          = "RMSE",
+    method          = "ranger",
+    tuneGrid        = tune_grid,
+    trControl       = traincotrlParams,
+    replace         = TRUE,
+    sample.fraction = 0.5,
+    num.trees       = 2000,        # boosted for the final model
+    importance      = "impurity"   # for variable importance analysis, alternative: "permutation"
+    )
+  
+  mod_rf_caret_leafp_within
+  
+  saveRDS(mod_rf_caret_leafp_within, file = filn)
+}
+
+# collect results into df
+addrow <- tibble(target = target,
+                 scale = "within",
+                 model = "RF",
+                 pred = "environment",
+                 rsq = mod_rf_caret_leafp_within$results[["Rsquared"]],
+                 rmse = mod_rf_caret_leafp_within$results[["RMSE"]])
+df_model_fitting <- df_model_fitting %>% 
+  bind_rows(addrow)
+```
+
+
+### Leaf N:P
+
+```{r}
+target <- "leafNP"
+shortlist <- readRDS(paste0(here::here(), "/data/shortlist_", target, ".rds"))
+```
+
+#### LM
+
+```{r}
+mod_lm_leafnp_within <- lm(
+
+  as.formula(paste("log( leafNP_diff ) ~ ", paste(shortlist, collapse = " + "))),
+  data = dplyr::select(df2, leafNP_diff, all_of(shortlist)) %>% drop_na()
+
+  )
+
+
+# This is new released July 21 2021 with many indicators
+tmp <- model_performance(mod_lm_leafnp_within, metrics = "common", verbose = TRUE)
+print(tmp)
+
+# collect results into df
+addrow <- tibble(target = target,
+                 scale = "within",
+                 model = "LM",
+                 pred = "environment",
+                 rsq = tmp$R2,
+                 rmse = tmp$RMSE)
+df_model_fitting <- df_model_fitting %>% 
+  bind_rows(addrow)
+```
+
+#### Random Forest
+
+```{r}
+filn <- paste0(here::here(), "/data/mod_rf_caret_leafnp_within.rds")
+
+if (file.exists(filn) && !overwrite){
+  
+  mod_rf_caret_leafnp_within <- readRDS(filn)
+  
+} else {
+ 
+  ## create generic formula for the model and define preprocessing steps
+  pp <- recipe(leafNP_diff ~ ., data = dplyr::select(df2, leafNP_diff, all_of(shortlist))) %>%
+  
+    ## impute by median as part of the recipe
+    # step_medianimpute(all_predictors())
+    step_impute_median(all_predictors())
+
+  traincotrlParams <- trainControl( 
+    method = "cv", 
+    number = 5, 
+    verboseIter = FALSE,
+    savePredictions = "final"
+    )
+  
+  ## best choice
+  tune_grid <- expand.grid( .mtry = 2,
+                            .min.node.size = 10,
+                            .splitrule = "variance"
+                            )
+  
+#   mtry  min.node.size  RMSE      Rsquared   MAE     
+#   2      3             5.548467  0.2150808  2.452213
+#   2      5             5.551590  0.2135746  2.455358
+#   2      8             5.547519  0.2136578  2.455343
+#   2     10             5.538746  0.2154857  2.452458
+#   2     30             5.567315  0.2058594  2.486075
+#   3      3             5.567058  0.2109273  2.456633
+#   3      5             5.556843  0.2127068  2.454572
+#   3      8             5.550123  0.2134689  2.455857
+#   3     10             5.558640  0.2106617  2.457978
+#   3     30             5.578583  0.2015879  2.485177
+#   4      3             5.567234  0.2110802  2.458628
+#   4      5             5.586666  0.2056069  2.461756
+#   4      8             5.565188  0.2093511  2.457767
+#   4     10             5.577756  0.2058568  2.459492
+#   4     30             5.567782  0.2048737  2.479242
+#   5      3             5.566441  0.2113829  2.454717
+#   5      5             5.585496  0.2058519  2.459852
+#   5      8             5.567774  0.2093039  2.458472
+#   5     10             5.563416  0.2095856  2.459791
+#   5     30             5.582647  0.2004493  2.481802
+# 
+# Tuning parameter 'splitrule' was held constant at a value of variance
+# RMSE was used to select the optimal model using the smallest value.
+# The final values used for the model were mtry = 2, splitrule = variance and min.node.size = 10.  
+
+  set.seed(1982)
+  
+  mod_rf_caret_leafnp_within <- train(
+    pp,
+    data            = dplyr::select(df2, leafNP_diff, all_of(shortlist)),
+    metric          = "RMSE",
+    method          = "ranger",
+    tuneGrid        = tune_grid,
+    trControl       = traincotrlParams,
+    replace         = TRUE,
+    sample.fraction = 0.5,
+    num.trees       = 2000,        # boosted for the final model
+    importance      = "impurity"   # for variable importance analysis, alternative: "permutation"
+    )
+  
+  mod_rf_caret_leafnp_within
+  
+  saveRDS(mod_rf_caret_leafnp_within, file = filn)
+}
+
+# collect results into df
+addrow <- tibble(target = target,
+                 scale = "within",
+                 model = "RF",
+                 pred = "environment",
+                 rsq = mod_rf_caret_leafnp_within$results[["Rsquared"]],
+                 rmse = mod_rf_caret_leafnp_within$results[["RMSE"]])
+df_model_fitting <- df_model_fitting %>% 
+  bind_rows(addrow)
 ```
 
 
 ## Visualisation
+
+### Overview
 
 Explanation:
 
@@ -1375,8 +1918,16 @@ gg2 <- df_model_fitting %>%
   ggplot(aes(x = model, y = rsq, fill = pred)) +
   geom_bar(stat="identity", position = "identity") +
   theme_classic() +
-  labs(title ="Leaf N", subtitle = "Species-level data", y = expression(italic(R)^2), x = "") +
-  scale_fill_manual(values = c("#29a274ff", "#777055ff"), labels = c("Environment", "Phylogenetic"), name = NULL) +
+  labs(title ="Leaf N", subtitle = "Full data", y = expression(italic(R)^2), x = "") +
+  scale_fill_manual(values = c("#29a274ff", "#777055ff"), labels = c("Environment", "Species identity"), name = NULL) +
+  scale_y_continuous(limits = c(0, 0.8), expand = c(0, 0))
+
+gg2_5 <- df_model_fitting %>% 
+  filter(target == "leafN" & scale == "within") %>% 
+  ggplot(aes(x = model, y = rsq)) +
+  geom_bar(stat="identity", position = "identity", fill = "#29a274ff") +
+  theme_classic() +
+  labs(title ="Leaf N", subtitle = "Within-species only", y = expression(italic(R)^2), x = "") +
   scale_y_continuous(limits = c(0, 0.8), expand = c(0, 0))
 
 # P
@@ -1393,8 +1944,16 @@ gg4 <- df_model_fitting %>%
   ggplot(aes(x = model, y = rsq, fill = pred)) +
   geom_bar(stat="identity", position = "identity") +
   theme_classic() +
-  labs(title ="Leaf P", subtitle = "Species-level data", y = expression(italic(R)^2), x = "") +
-  scale_fill_manual(values = c("#29a274ff", "#777055ff"), labels = c("Environment", "Phylogenetic"), name = NULL) +
+  labs(title ="Leaf P", subtitle = "Full data", y = expression(italic(R)^2), x = "") +
+  scale_fill_manual(values = c("#29a274ff", "#777055ff"), labels = c("Environment", "Species identity"), name = NULL) +
+  scale_y_continuous(limits = c(0, 0.8), expand = c(0, 0))
+
+gg4_5 <- df_model_fitting %>% 
+  filter(target == "leafP" & scale == "within") %>% 
+  ggplot(aes(x = model, y = rsq)) +
+  geom_bar(stat="identity", position = "identity", fill = "#29a274ff") +
+  theme_classic() +
+  labs(title ="Leaf P", subtitle = "Within-species only", y = expression(italic(R)^2), x = "") +
   scale_y_continuous(limits = c(0, 0.8), expand = c(0, 0))
 
 # N:P
@@ -1411,14 +1970,92 @@ gg6 <- df_model_fitting %>%
   ggplot(aes(x = model, y = rsq, fill = pred)) +
   geom_bar(stat="identity", position = "identity") +
   theme_classic() +
-  labs(title ="Leaf N:P", subtitle = "Species-level data", y = expression(italic(R)^2), x = "") +
-  scale_fill_manual(values = c("#29a274ff", "#777055ff"), labels = c("Environment", "Phylogenetic"), name = NULL) +
+  labs(title ="Leaf N:P", subtitle = "Full data", y = expression(italic(R)^2), x = "") +
+  scale_fill_manual(values = c("#29a274ff", "#777055ff"), labels = c("Environment", "Species identity"), name = NULL) +
+  scale_y_continuous(limits = c(0, 0.8), expand = c(0, 0))
+
+gg6_5 <- df_model_fitting %>% 
+  filter(target == "leafNP" & scale == "within") %>% 
+  ggplot(aes(x = model, y = rsq)) +
+  geom_bar(stat="identity", position = "identity", fill = "#29a274ff") +
+  theme_classic() +
+  labs(title ="Leaf N:P", subtitle = "Within-species only", y = expression(italic(R)^2), x = "") +
   scale_y_continuous(limits = c(0, 0.8), expand = c(0, 0))
 
 plot_grid(gg1, gg2, rel_widths = c(0.5, 0.8), ncol = 2)
 plot_grid(gg3, gg4, rel_widths = c(0.5, 0.8), ncol = 2)
 plot_grid(gg5, gg6, rel_widths = c(0.5, 0.8), ncol = 2)
 
-plot_grid(gg1, gg2, gg3, gg4, gg5, gg6, rel_widths = c(0.5, 0.8), ncol = 2, labels = c("a", "b", "c", "d", "e", "f"))
-ggsave(paste0(here::here(), "/fig/bars_model_fitting.pdf"), width = 6, height = 8)
+plot_grid(gg1, gg2_5, gg2, 
+          gg3, gg4_5, gg4,
+          gg5, gg6_5, gg6,
+          rel_widths = c(0.5, 0.5, 0.8), ncol = 3, labels = c("a", "b", "c", "d", "e", "f", "g", "h", "i"))
+ggsave(paste0(here::here(), "/fig/bars_model_fitting.pdf"), width = 9, height = 8)
+```
+
+### Effects
+
+```{r}
+df_t_n <- tibble(
+  pred = names(summary(mod_lmm_leafn)$tTable[,"t-value"]),
+  tval = summary(mod_lmm_leafn)$tTable[,"t-value"],
+  pval = summary(mod_lmm_leafn)$tTable[,"p-value"]
+  ) |> 
+  filter(pred != "(Intercept)") |> 
+  filter(pval < 0.01)
+
+df_t_p <- tibble(
+  pred = names(summary(mod_lmm_leafp)$tTable[,"t-value"]),
+  tval = summary(mod_lmm_leafp)$tTable[,"t-value"],
+  pval = summary(mod_lmm_leafp)$tTable[,"p-value"]
+  ) |> 
+  filter(pred != "(Intercept)") |> 
+  filter(pval < 0.01)
+
+df_t_np <- tibble(
+  pred = names(summary(mod_lmm_leafnp)$tTable[,"t-value"]),
+  tval = summary(mod_lmm_leafnp)$tTable[,"t-value"],
+  pval = summary(mod_lmm_leafnp)$tTable[,"p-value"]
+  ) |> 
+  filter(pred != "(Intercept)") |> 
+  filter(pval < 0.01)
+```
+
+```{r}
+ggt1 <- df_t_n %>% 
+  mutate(pred = fct_reorder(pred, tval)) %>%
+  ggplot(aes(pred, tval)) +
+  geom_bar(stat = "identity", fill = "#777055ff") +
+  labs(title = "Leaf N", x = "", y = expression(italic(t)-value)) +
+  coord_flip() +
+  theme_classic()
+
+ggt2 <- df_t_p %>% 
+  mutate(pred = fct_reorder(pred, tval)) %>%
+  ggplot(aes(pred, tval)) +
+  geom_bar(stat = "identity", fill = "#777055ff") +
+  labs(title = "Leaf P", x = "", y = expression(italic(t)-value)) +
+  coord_flip() +
+  theme_classic()
+
+ggt3 <- df_t_np %>% 
+  mutate(pred = fct_reorder(pred, tval)) %>%
+  ggplot(aes(pred, tval)) +
+  geom_bar(stat = "identity", fill = "#777055ff") +
+  labs(title = "Leaf N:P", x = "", y = expression(italic(t)-value)) +
+  coord_flip() +
+  theme_classic()
+
+# files created in feature_elimination_leafnp.Rmd
+gga1 <- readRDS(paste0(here::here(), "/data/gga1.rds"))
+gga2 <- readRDS(paste0(here::here(), "/data/gga2.rds"))
+gga3 <- readRDS(paste0(here::here(), "/data/gga3.rds"))
+
+plot_grid(gga1, gga2, gga3,
+          ggt1, ggt2, ggt3, 
+          labels =  c("a", "b", "c", "d", "e", "f"), 
+          ncol = 3,
+          rel_heights = c(1, 0.65))
+
+ggsave(paste0(here::here(), "/fig/bars_fe_tvals.pdf"), width = 12, height = 6)
 ```

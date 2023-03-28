@@ -261,19 +261,19 @@ df_mean_species <- df %>%
             leafP_mean  = mean(leafP),
             leafNP_mean = mean(LeafNP))
 
-# get ranges across all sites
-range_n_sitemeans <- df |> 
-  pull(leafN_sitemean) |> 
-  quantile(probs = c(0.01, 0.99)) |> 
-  diff()
-range_p_sitemeans <- df |> 
-  pull(leafP_sitemean) |> 
-  quantile(probs = c(0.01, 0.99)) |> 
-  diff()
-range_np_sitemeans <- df |> 
-  pull(leafNP_sitemean) |> 
-  quantile(probs = c(0.01, 0.99)) |> 
-  diff()
+# # get ranges across all sites
+# range_n_sitemeans <- df |> 
+#   pull(leafN_sitemean) |> 
+#   quantile(probs = c(0.01, 0.99)) |> 
+#   diff()
+# range_p_sitemeans <- df |> 
+#   pull(leafP_sitemean) |> 
+#   quantile(probs = c(0.01, 0.99)) |> 
+#   diff()
+# range_np_sitemeans <- df |> 
+#   pull(leafNP_sitemean) |> 
+#   quantile(probs = c(0.01, 0.99)) |> 
+#   diff()
 
 df_tga <- df %>% 
   
@@ -303,9 +303,9 @@ df_tga <- df %>%
          range_np = purrr::map(linmod_np, ~get_x(.))) |> 
   
   # range in site-level mean from raw TGA
-  mutate(range_n  = purrr::map_dbl(range_n,  ~diff(range(.))),
-         range_p  = purrr::map_dbl(range_p,  ~diff(range(.))),
-         range_np = purrr::map_dbl(range_np, ~diff(range(.))),
+  mutate(range_n  = purrr::map_dbl(range_n,  ~diff(quantile(., probs = c(0.01, 0.99)))),
+         range_p  = purrr::map_dbl(range_p,  ~diff(quantile(., probs = c(0.01, 0.99)))),
+         range_np = purrr::map_dbl(range_np, ~diff(quantile(., probs = c(0.01, 0.99)))),
          ) |> 
   
   # get phylo info
@@ -330,6 +330,34 @@ df_tga <- df %>%
   
   # remove outlier in slope P
   filter(slope_p > -5 & slope_p < 5 & range_p_norm > 0)
+```
+
+Maximum density (mode) of the distribution of slopes.
+```{r}
+vec <- df_tga$slope_n
+
+get_mode <- function(vec){
+  # based on https://stackoverflow.com/questions/58785930/r-find-maximum-of-density-plot
+ 
+  # exclude wiggles on either end
+  vec <- vec[vec > -0.5 & vec < 2]
+ 
+  d <- density(vec)
+  i <- which(diff(sign(diff(d$y))) < 0) + 1
+  out <- d$x[i]
+  
+  # out <- data.frame(x = d$x[i], y = d$y[i])  
+  return(out)
+}
+
+df_modes <- df_tga |> 
+  ungroup() |> 
+  summarise(mode_n  = get_mode(slope_n),
+            mode_p  = get_mode(slope_p),
+            mode_np = get_mode(slope_np)
+            )
+
+df_modes
 ```
 
 
@@ -364,7 +392,7 @@ gg_ranges <- df_tga %>%
   # xlim(-2,3) +
   theme_classic() +
   labs(x = "Normalised range", y = "Density") +
-  geom_vline(xintercept = 1, linetype = "dotted") +
+  # geom_vline(xintercept = 1, linetype = "dotted") +
   theme(legend.title = element_blank())
 
 gg_ranges
@@ -479,17 +507,72 @@ gg_slopes_species_np <- df_tga |>
 
 gg_slopes_species_np
 ggsave(paste0(here::here(), "/fig/tga_slopes_bars_leafnp_species.pdf"), width = 7, height = 7)
+```
 
-midrow <- cowplot::plot_grid(gg_slopes, gg_ranges, labels = c("d", "e"), ncol = 2)
-midrow
-ggsave(paste0(here::here(), "/fig/tga_log_mid.pdf"), width = 12, height = 4)
+Slopes by family
+```{r}
+df_families <- df_tga |> 
+  group_by(Family) |> 
+  summarise(n = n()) |> 
+  arrange(desc(n)) |> 
+  filter(n >= 5)
+  
+use_families <- df_families |> 
+  pull(Family)
 
-bottomrow <- cowplot::plot_grid(gg_slopes_species_n, gg_slopes_species_p, gg_slopes_species_np, labels = c("f", "g", "h"), ncol = 3, rel_widths = c(0.65, 0.65, 1))
-bottomrow
-ggsave(paste0(here::here(), "/fig/tga_log_bottom.pdf"), width = 12, height = 5)
+# Leaf N
+gg1 <- df_tga |> 
+  ungroup() |> 
+  filter(Family %in% use_families) |> 
+  left_join(df_families, by = "Family") |> 
+  mutate(Family = paste0(Family, " (", as.character(n), ")")) |> 
+  mutate(Family = fct_reorder(Family, slope_n)) |> 
+  ggplot(aes(x = slope_n, y = Family)) +
+  ggridges::geom_density_ridges(scale = 2) + 
+  xlim(-2, 3) +
+  coord_cartesian(clip = "off") + # to avoid clipping of the very top of the top ridgeline
+  theme_ridges() +
+  geom_vline(xintercept = c(0,1), linetype = "dotted") +
+  labs(title = "Leaf N", x = "Slope")
 
-plot_grid(toprow, midrow, bottomrow, nrow = 3, rel_heights = c(0.7, 0.5, 1.1))
-ggsave(paste0(here::here(), "/fig/tga_log_all.pdf"), width = 12, height = 13)
+# Leaf P
+gg2 <- df_tga |> 
+  ungroup() |> 
+  filter(Family %in% use_families) |> 
+  left_join(df_families, by = "Family") |> 
+  mutate(Family = paste0(Family, " (", as.character(n), ")")) |> 
+  mutate(Family = fct_reorder(Family, slope_p)) |> 
+  ggplot(aes(x = slope_p, y = Family)) +
+  ggridges::geom_density_ridges(scale = 2) + 
+  xlim(-2, 3) +
+  coord_cartesian(clip = "off") + # to avoid clipping of the very top of the top ridgeline
+  theme_ridges() +
+  geom_vline(xintercept = c(0,1), linetype = "dotted") +
+  labs(title = "Leaf P", x = "Slope")
+
+# Leaf N:P
+gg3 <- df_tga |> 
+  ungroup() |> 
+  filter(Family %in% use_families) |> 
+  left_join(df_families, by = "Family") |> 
+  mutate(Family = paste0(Family, " (", as.character(n), ")")) |> 
+  mutate(Family = fct_reorder(Family, slope_n)) |> 
+  ggplot(aes(x = slope_n, y = Family)) +
+  ggridges::geom_density_ridges(scale = 2) + 
+  xlim(-2, 3) +
+  coord_cartesian(clip = "off") + # to avoid clipping of the very top of the top ridgeline
+  theme_ridges() +
+  geom_vline(xintercept = c(0,1), linetype = "dotted") +
+  labs(title = "Leaf N:P", x = "Slope")
+
+plot_grid(gg1, gg2, gg3, nrow = 1)
+ggsave(paste0(here::here(), "/fig/slopes_families.pdf"), width = 12, height = 5)
+```
+
+```{r}
+median(df_tga$range_n_norm)
+median(df_tga$range_p_norm)
+median(df_tga$range_np_norm)
 ```
 
 ### Correlations of slopes and ranges
@@ -526,7 +609,109 @@ df_tga |>
   ggplot(aes(range_n, range_p)) +
   geom_point()
 
+cor(df_tga$range_n, df_tga$range_p)
 ```
+
+## Species variation decomposition
+
+Make two alternative (extreme) assumptions and test how much of the overall variations $x_i$ these simplifying scenarios explain:
+
+- Scenario 1: All variations are across species. Species all have their fixed $\overline{x_{i}}$.
+- Scenario 2: All variations are within species, no variations between species. All species have the same mean $\overline{x}$. 
+
+```{r}
+df_species <- df |>
+  
+  # subset
+  dplyr::select(all_of(c("sitename", "Species", "leafN", "leafP", "LeafNP"))) |> 
+  dplyr::filter(Species %in% use_species & sitename %in% use_sites) |> 
+  
+  # fit linear regressions by species
+  group_by(Species) |> 
+  summarise(across(all_of(c("leafN", "leafP", "LeafNP")), mean)) |> 
+  rename(leafN_mean = leafN, leafP_mean = leafP, leafNP_mean = LeafNP)
+
+df_species_mean <- df_species |> 
+  ungroup() |> 
+  summarise(across(all_of(c("leafN_mean", "leafP_mean", "leafNP_mean")), mean))
+  
+df2 <- df |> 
+
+  # subset
+  dplyr::select(all_of(c("sitename", "Species", "leafN", "leafP", "LeafNP"))) |> 
+  dplyr::filter(Species %in% use_species & sitename %in% use_sites) |> 
+  
+  left_join(df_species, by = "Species") |> 
+  ungroup() |> 
+  mutate(leafN_diff = leafN - leafN_mean, 
+         leafP_diff = leafP - leafP_mean, 
+         leafNP_diff = LeafNP - leafNP_mean) |> 
+  
+  # H1: All variations are among species. Species all have their fixed $\overline{x_{i}}$.
+  mutate(leafN_h1  = leafN_mean,
+         leafP_h1  = leafP_mean,
+         leafNP_h1 = leafNP_mean) |> 
+  
+  # H2: All variations are within species, no variations between species. 
+  # All species have the same mean $\overline{x}$.
+  mutate(leafN_h2  = df_species_mean$leafN_mean  + leafN_diff,
+         leafP_h2  = df_species_mean$leafP_mean  + leafP_diff,
+         leafNP_h2 = df_species_mean$leafNP_mean + leafNP_diff,
+         )
+  
+# collect R-squared of the partitionings
+df_part <- tibble() |> 
+  
+  # leaf N
+  bind_rows(
+    yardstick::rsq_trad(df2, "leafN", "leafN_h1") |> 
+      mutate(var = "leafN", type = "across"), 
+  ) |> 
+  bind_rows(
+    yardstick::rsq_trad(df2, "leafN", "leafN_h2") |> 
+      mutate(var = "leafN", type = "within"), 
+  ) |> 
+  
+  # leaf P
+  bind_rows(
+    yardstick::rsq_trad(df2, "leafP", "leafP_h1") |> 
+      mutate(var = "leafP", type = "across"), 
+  ) |> 
+  bind_rows(
+    yardstick::rsq_trad(df2, "leafP", "leafP_h2") |> 
+      mutate(var = "leafP", type = "within"), 
+  ) |> 
+  
+  # leaf P
+  bind_rows(
+    yardstick::rsq_trad(df2, "LeafNP", "leafNP_h1") |> 
+      mutate(var = "leafNP", type = "across"), 
+  ) |> 
+  bind_rows(
+    yardstick::rsq_trad(df2, "LeafNP", "leafNP_h2") |> 
+      mutate(var = "leafNP", type = "within"), 
+  )
+  # pivot_wider(names_from = "type", values_from = ".estimate")
+
+gg_part <- df_part |>  
+  mutate(var = ifelse(var == "leafN", "Leaf N",
+                      ifelse(var == "leafP", "Leaf P",
+                             "Leaf N:P"))) |> 
+  mutate(var = factor(var, levels = rev(c("Leaf N", "Leaf P", "Leaf N:P")))) |> 
+  
+  ggplot(aes(x = var, y = .estimate, fill = type)) +
+  geom_bar(stat="identity", position = "fill", width = 0.6) +
+  coord_flip() +
+  theme_classic() +
+  scale_fill_manual(values = c("#777055ff", "#29a274ff"),
+                    labels = c("across", "within"),
+                    name = NULL) +
+  scale_y_continuous(limits = c(0, 1), expand = c(0, 0)) +
+  labs(title = "Species variation decomposition",
+       y = "Fraction of variation explained",
+       x = "")
+```
+
 
 ## Log TGA with RF predictions
 
@@ -630,4 +815,20 @@ df_tga2 %>%
   labs(x = "Slope", y = "Density") +
   geom_vline(xintercept = 1, linetype = "dotted") +
   theme(legend.title = element_blank())
+```
+
+
+## Publication figure
+
+```{r}
+midrow <- cowplot::plot_grid(gg_slopes, gg_ranges, gg_part, labels = c("d", "e", "f"), ncol = 3)
+midrow
+ggsave(paste0(here::here(), "/fig/tga_log_mid.pdf"), width = 12, height = 4)
+
+bottomrow <- cowplot::plot_grid(gg_slopes_species_n, gg_slopes_species_p, gg_slopes_species_np, labels = c("g", "h", "i"), ncol = 3, rel_widths = c(0.65, 0.65, 1))
+bottomrow
+ggsave(paste0(here::here(), "/fig/tga_log_bottom.pdf"), width = 12, height = 5)
+
+plot_grid(toprow, midrow, bottomrow, nrow = 3, rel_heights = c(0.7, 0.5, 1.1))
+ggsave(paste0(here::here(), "/fig/tga_log_all.pdf"), width = 12, height = 13)
 ```
