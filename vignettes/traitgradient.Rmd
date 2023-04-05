@@ -8,6 +8,7 @@ output: html_document
 ```{r setup, include=FALSE}
 library(tidyverse)
 library(RColorBrewer)
+library(cowplot)
 ```
 
 ## Prepare data
@@ -253,32 +254,26 @@ get_x <- function(linmod){
 df_agg <- df |> 
   ungroup() |> 
   dplyr::filter(Species %in% use_species & sitename %in% use_sites) |> 
+  summarise(leafN = mean(leafN),
+            leafP = mean(leafP),
+            leafNP = mean(LeafNP))  
+  
+  # nest(data = everything()) |> 
+  # mutate(range_n     = purrr::map_dbl(data, ~diff(quantile(pull(., leafN), probs = c(0.01, 0.99)))),
+  #        range_p     = purrr::map_dbl(data, ~diff(quantile(pull(., leafP), probs = c(0.01, 0.99)))),
+  #        range_np    = purrr::map_dbl(data, ~diff(quantile(pull(., LeafNP), probs = c(0.01, 0.99))))
+  #        ) |> 
+  # select( -data )
+
+df_agg_sitemean <- df |> 
+  ungroup() |> 
+  dplyr::filter(Species %in% use_species & sitename %in% use_sites) |> 
   nest(data = everything()) |> 
-  mutate(range_n     = purrr::map_dbl(data, ~diff(quantile(pull(., leafN), probs = c(0.01, 0.99)))),
-         range_p     = purrr::map_dbl(data, ~diff(quantile(pull(., leafP), probs = c(0.01, 0.99)))),
-         range_np    = purrr::map_dbl(data, ~diff(quantile(pull(., LeafNP), probs = c(0.01, 0.99))))
+  mutate(range_n     = purrr::map_dbl(data, ~diff(quantile(pull(., leafN_sitemean), probs = c(0.01, 0.99)))),
+         range_p     = purrr::map_dbl(data, ~diff(quantile(pull(., leafP_sitemean), probs = c(0.01, 0.99)))),
+         range_np    = purrr::map_dbl(data, ~diff(quantile(pull(., leafNP_sitemean), probs = c(0.01, 0.99))))
          ) |> 
   select( -data )
-
-# df_agg_species <- df |> 
-#   
-#   # subset
-#   dplyr::filter(Species %in% use_species & sitename %in% use_sites) |> 
-#   
-#   # fit linear regressions by species
-#   group_by(Species) |> 
-#   nest() |> 
-#   mutate(leafN_mean  = purrr::map_dbl(data, ~mean(pull(., leafN))),
-#          leafP_mean  = purrr::map_dbl(data, ~mean(pull(., leafP))),
-#          leafNP_mean = purrr::map_dbl(data, ~mean(pull(., LeafNP))),
-#          range_n     = purrr::map_dbl(data, ~diff(quantile(pull(., leafN), probs = c(0.01, 0.99)))),
-#          range_p     = purrr::map_dbl(data, ~diff(quantile(pull(., leafP), probs = c(0.01, 0.99)))),
-#          range_np    = purrr::map_dbl(data, ~diff(quantile(pull(., LeafNP), probs = c(0.01, 0.99))))
-#          ) |> 
-#   mutate(range_n_norm = range_n / df_agg$range_n,
-#          range_p_norm = range_p / df_agg$range_p,
-#          range_np_norm = range_np / df_agg$range_np,
-#          )
 
 df_tga <- df |> 
   
@@ -312,11 +307,18 @@ df_tga <- df |>
          range_p  = purrr::map_dbl(range_p,  ~diff(quantile(., probs = c(0.01, 0.99)))),
          range_np = purrr::map_dbl(range_np, ~diff(quantile(., probs = c(0.01, 0.99)))),
          ) |> 
-  
-  mutate(range_n_norm = range_n / df_agg$range_n,
-         range_p_norm = range_p / df_agg$range_p,
-         range_np_norm = range_np / df_agg$range_np,
-         ) |> 
+
+  # # normalise by overall range  
+  # mutate(range_n_norm = range_n / df_agg$leafN,
+  #        range_p_norm = range_p / df_agg$leafP,
+  #        range_np_norm = range_np / df_agg$leafNP,
+  #        ) |> 
+
+  # normalise by range of site means
+  mutate(range_n_norm = range_n / df_agg_sitemean$range_n,
+         range_p_norm = range_p / df_agg_sitemean$range_p,
+         range_np_norm = range_np / df_agg_sitemean$range_np,
+         ) |>
   
   # add phylo info
   left_join(df|> 
@@ -327,6 +329,7 @@ df_tga <- df |>
   # remove outlier in slope P
   filter(slope_p > -5 & slope_p < 5 & range_p_norm > 0)
 ```
+
 
 Maximum density (mode) of the distribution of slopes.
 ```{r}
@@ -359,7 +362,7 @@ df_modes
 
 ```{r}
 # distribution of slopes
-gg_slopes <- df_tga|> 
+gg_slopes <- df_tga |> 
   pivot_longer(c(slope_n, slope_p, slope_np), values_to = "slope", names_to = "trait") |> 
   mutate(trait = factor(trait, level = c("slope_n", "slope_p", "slope_np"))) |> 
   ggplot(aes(slope, ..density.., color = trait, fill = trait)) +
@@ -376,24 +379,26 @@ gg_slopes
 ggsave(paste0(here::here(), "/fig/tga_slopes_density.pdf"), width = 7, height = 5)
 
 # distribution of ranges
-df_tga_median <- df_tga|> 
-  pivot_longer(c(range_n_norm, range_p_norm, range_np_norm), 
-               values_to = "range", 
-               names_to = "trait") |>
-  group_by(trait) |> 
-  summarise(across(range, median))
-
 df_tmp <- df_tga %>% 
+  select(range_n_norm, range_p_norm, range_np_norm) |> 
   pivot_longer(c(range_n_norm, range_p_norm, range_np_norm), 
                values_to = "range", 
                names_to = "trait") |> 
   mutate(trait = factor(trait, level = c("range_n_norm", "range_p_norm", "range_np_norm")))
 
+# get median normalised range for each trait
+df_tmp2 <- df_tga |> 
+  pivot_longer(c(range_n_norm, range_p_norm, range_np_norm), 
+               values_to = "range", 
+               names_to = "trait") |> 
+  group_by(trait) |> 
+  summarise(range = median(range))
+
 gg_ranges <- ggplot() +
   geom_density(data = df_tmp, 
                aes(range, ..density.., color = trait, fill = trait), 
                alpha = 0.3) +
-  geom_vline(data = df_tga_median, 
+  geom_vline(data = df_tmp2, 
              aes(xintercept = range, color = trait)) +
   khroma::scale_color_highcontrast(labels = c("N", "P", "N:P")) +
   khroma::scale_fill_highcontrast(labels = c("N", "P", "N:P")) +
@@ -423,7 +428,7 @@ df_tga |>
 ggsave(paste0(here::here(), "/fig/tga_slopes_bars_leafn.pdf"), width = 7, height = 10)
 
 # mean slopes by family: P
-df_tga|> 
+df_tga |> 
   group_by(Family) %>% 
   summarise(slope_p = mean(slope_p)) %>% 
   mutate(Family = fct_reorder(Family, slope_p)) %>% 
@@ -516,6 +521,11 @@ gg_slopes_species_np
 ggsave(paste0(here::here(), "/fig/tga_slopes_bars_leafnp_species.pdf"), width = 7, height = 7)
 ```
 
+Median ranges:
+```{r}
+df_tmp2
+```
+
 Slopes by family
 ```{r}
 df_families <- df_tga |> 
@@ -585,41 +595,63 @@ median(df_tga$range_np_norm)
 ### Correlations of slopes and ranges
 
 ```{r}
-# correlation of slopes for N and P
-out <- df_tga |> 
-  # remove outliers
+# SLOPE P VS SLOPE N
+r_pearson <- format(cor(df_tga$slope_n, df_tga$slope_p), digits = 2)
+p_pearson <- format(cor.test(df_tga$slope_n, df_tga$slope_p, method = "pearson")$p.value, digits = 2)
+df_tga |> 
   filter(slope_n > -5, slope_n < 5, slope_p > -5, slope_p < 5) |> 
-  rbeni::analyse_modobs2("slope_p", "slope_n", rsquared = FALSE)
-
-out$gg
+  ggplot(aes(slope_n, slope_p)) +
+  geom_point() +
+  labs(x = expression(paste("Slope N")),
+       y = expression(paste("Slope P")),
+       subtitle = bquote( italic(r) == .(r_pearson) ~~
+                          italic(p) == .(p_pearson) )
+      ) +
+  geom_smooth(method = "lm", color = "red", se = FALSE) +
+  theme_classic()
 
 # correlation of slopes and range for N
-out <- df_tga |> 
-  # remove outliers
+r_pearson <- format(cor(df_tga$slope_n, df_tga$range_n), digits = 2)
+p_pearson <- format(cor.test(df_tga$slope_n, df_tga$range_n, method = "pearson")$p.value, digits = 2)
+df_tga |> 
   filter(slope_n > -5, slope_n < 5, slope_p > -5, slope_p < 5) |> 
-  rbeni::analyse_modobs2("slope_n", "range_n", rsquared = FALSE)
-
-out$gg
+  ggplot(aes(slope_n, range_n)) +
+  geom_point() +
+  labs(x = expression(paste("Slope N")),
+       y = expression(paste("Range N")),
+       subtitle = bquote( italic(r) == .(r_pearson) ~~
+                          italic(p) == .(p_pearson) )
+      ) +
+  theme_classic()
 
 # correlation of slopes and range for P
-out <- df_tga |> 
-  # remove outliers
+r_pearson <- format(cor(df_tga$slope_p, df_tga$range_p), digits = 2)
+p_pearson <- format(cor.test(df_tga$slope_p, df_tga$range_p, method = "pearson")$p.value, digits = 2)
+df_tga |> 
   filter(slope_n > -5, slope_n < 5, slope_p > -5, slope_p < 5) |> 
-  rbeni::analyse_modobs2("slope_p", "range_p", rsquared = FALSE)
+  ggplot(aes(slope_p, range_p)) +
+  geom_point() +
+  labs(x = expression(paste("Slope P")),
+       y = expression(paste("Range P")),
+       subtitle = bquote( italic(r) == .(r_pearson) ~~
+                          italic(p) == .(p_pearson) )
+      ) +
+  # geom_smooth(method = "lm", color = "red", se = FALSE) +
+  theme_classic()
 
-out$gg
 
 # correlation of ranges for N and P
 r_pearson <- format(cor(df_tga$range_n, df_tga$range_p), digits = 2)
+p_pearson <- format(cor.test(df_tga$range_n, df_tga$range_p, method = "pearson")$p.value, digits = 2)
 df_tga |> 
-  # remove outliers
   filter(slope_n > -5, slope_n < 5, slope_p > -5, slope_p < 5) |> 
   ggplot(aes(range_n, range_p)) +
   geom_point() +
   labs(x = expression(paste("Leaf N range (g N (g DM)"^-1, ")")),
        y = expression(paste("Leaf P range (g P (g DM)"^-1, ")")),
-       subtitle = bquote( italic(r) == .(r_pearson) )
+       subtitle = bquote( italic(r) == .(r_pearson))
       ) +
+  geom_smooth(method = "lm", color = "red", se = FALSE) +
   theme_classic()
 ggsave(paste0(here::here(), "/fig/cor_ranges.pdf"), width = 5, height = 5)
 ggsave(paste0(here::here(), "/fig/cor_ranges.png"), width = 5, height = 5)
@@ -842,6 +874,12 @@ bottomrow <- cowplot::plot_grid(gg_slopes_species_n, gg_slopes_species_p, gg_slo
 bottomrow
 ggsave(paste0(here::here(), "/fig/tga_log_bottom.pdf"), width = 12, height = 5)
 
-plot_grid(toprow, midrow, bottomrow, nrow = 3, rel_heights = c(0.7, 0.5, 1.1))
+cowplot::plot_grid(toprow, midrow, bottomrow, nrow = 3, rel_heights = c(0.7, 0.5, 1.1))
 ggsave(paste0(here::here(), "/fig/tga_log_all.pdf"), width = 12, height = 13)
+ggsave(paste0(here::here(), "/fig/tga_log_all.png"), width = 12, height = 13)
+
+# # no species-level information
+# cowplot::plot_grid(toprow, midrow, nrow = 2, rel_heights = c(0.6, 0.5))
+# ggsave(paste0(here::here(), "/fig/tga_log_all.pdf"), width = 12, height = 7)
+# ggsave(paste0(here::here(), "/fig/tga_log_all.png"), width = 12, height = 7)
 ```
