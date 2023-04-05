@@ -249,33 +249,38 @@ Fit linear regressions by species.
 get_x <- function(linmod){
   as.vector(linmod$x[,2])
 }
-
-df_mean_species <- df %>% 
-  
-  # subset
+         
+df_agg <- df |> 
+  ungroup() |> 
   dplyr::filter(Species %in% use_species & sitename %in% use_sites) |> 
-  
-  # fit linear regressions by species
-  group_by(Species) |> 
-  summarise(leafN_mean  = mean(leafN),
-            leafP_mean  = mean(leafP),
-            leafNP_mean = mean(LeafNP))
+  nest(data = everything()) |> 
+  mutate(range_n     = purrr::map_dbl(data, ~diff(quantile(pull(., leafN), probs = c(0.01, 0.99)))),
+         range_p     = purrr::map_dbl(data, ~diff(quantile(pull(., leafP), probs = c(0.01, 0.99)))),
+         range_np    = purrr::map_dbl(data, ~diff(quantile(pull(., LeafNP), probs = c(0.01, 0.99))))
+         ) |> 
+  select( -data )
 
-# # get ranges across all sites
-# range_n_sitemeans <- df |> 
-#   pull(leafN_sitemean) |> 
-#   quantile(probs = c(0.01, 0.99)) |> 
-#   diff()
-# range_p_sitemeans <- df |> 
-#   pull(leafP_sitemean) |> 
-#   quantile(probs = c(0.01, 0.99)) |> 
-#   diff()
-# range_np_sitemeans <- df |> 
-#   pull(leafNP_sitemean) |> 
-#   quantile(probs = c(0.01, 0.99)) |> 
-#   diff()
+# df_agg_species <- df |> 
+#   
+#   # subset
+#   dplyr::filter(Species %in% use_species & sitename %in% use_sites) |> 
+#   
+#   # fit linear regressions by species
+#   group_by(Species) |> 
+#   nest() |> 
+#   mutate(leafN_mean  = purrr::map_dbl(data, ~mean(pull(., leafN))),
+#          leafP_mean  = purrr::map_dbl(data, ~mean(pull(., leafP))),
+#          leafNP_mean = purrr::map_dbl(data, ~mean(pull(., LeafNP))),
+#          range_n     = purrr::map_dbl(data, ~diff(quantile(pull(., leafN), probs = c(0.01, 0.99)))),
+#          range_p     = purrr::map_dbl(data, ~diff(quantile(pull(., leafP), probs = c(0.01, 0.99)))),
+#          range_np    = purrr::map_dbl(data, ~diff(quantile(pull(., LeafNP), probs = c(0.01, 0.99))))
+#          ) |> 
+#   mutate(range_n_norm = range_n / df_agg$range_n,
+#          range_p_norm = range_p / df_agg$range_p,
+#          range_np_norm = range_np / df_agg$range_np,
+#          )
 
-df_tga <- df %>% 
+df_tga <- df |> 
   
   # subset
   dplyr::filter(Species %in% use_species & sitename %in% use_sites) %>% 
@@ -308,25 +313,16 @@ df_tga <- df %>%
          range_np = purrr::map_dbl(range_np, ~diff(quantile(., probs = c(0.01, 0.99)))),
          ) |> 
   
-  # get phylo info
-  left_join(df %>% 
-              dplyr::select(Family, Genus, Species) %>% 
+  mutate(range_n_norm = range_n / df_agg$range_n,
+         range_p_norm = range_p / df_agg$range_p,
+         range_np_norm = range_np / df_agg$range_np,
+         ) |> 
+  
+  # add phylo info
+  left_join(df|> 
+              dplyr::select(Family, Genus, Species)|> 
               distinct(), 
             by = "Species") |> 
-  
-  # # standardise by the total range (difference between the 1% and the 99% quantiles)
-  # mutate(range_n_norm  = range_n / range_n_sitemeans,
-  #        range_p_norm  = range_p / range_p_sitemeans,
-  #        range_np_norm = range_np / range_np_sitemeans) |>
-
-  # standardise by dividing by mean of species
-  left_join(
-    df_mean_species,
-    by = "Species"
-  ) |>
-  mutate(range_n_norm  = range_n / leafN_mean,
-         range_p_norm  = range_p / leafP_mean,
-         range_np_norm = range_np / leafNP_mean) |>
   
   # remove outlier in slope P
   filter(slope_p > -5 & slope_p < 5 & range_p_norm > 0)
@@ -363,7 +359,7 @@ df_modes
 
 ```{r}
 # distribution of slopes
-gg_slopes <- df_tga %>% 
+gg_slopes <- df_tga|> 
   pivot_longer(c(slope_n, slope_p, slope_np), values_to = "slope", names_to = "trait") |> 
   mutate(trait = factor(trait, level = c("slope_n", "slope_p", "slope_np"))) |> 
   ggplot(aes(slope, ..density.., color = trait, fill = trait)) +
@@ -379,27 +375,38 @@ gg_slopes <- df_tga %>%
 gg_slopes
 ggsave(paste0(here::here(), "/fig/tga_slopes_density.pdf"), width = 7, height = 5)
 
-# distribution of widths
-gg_ranges <- df_tga %>% 
+# distribution of ranges
+df_tga_median <- df_tga|> 
+  pivot_longer(c(range_n_norm, range_p_norm, range_np_norm), 
+               values_to = "range", 
+               names_to = "trait") |>
+  group_by(trait) |> 
+  summarise(across(range, median))
+
+df_tmp <- df_tga %>% 
   pivot_longer(c(range_n_norm, range_p_norm, range_np_norm), 
                values_to = "range", 
                names_to = "trait") |> 
-  mutate(trait = factor(trait, level = c("range_n_norm", "range_p_norm", "range_np_norm"))) |> 
-  ggplot(aes(range, ..density.., color = trait, fill = trait)) +
-  geom_density(alpha = 0.3) +
+  mutate(trait = factor(trait, level = c("range_n_norm", "range_p_norm", "range_np_norm")))
+
+gg_ranges <- ggplot() +
+  geom_density(data = df_tmp, 
+               aes(range, ..density.., color = trait, fill = trait), 
+               alpha = 0.3) +
+  geom_vline(data = df_tga_median, 
+             aes(xintercept = range, color = trait)) +
   khroma::scale_color_highcontrast(labels = c("N", "P", "N:P")) +
   khroma::scale_fill_highcontrast(labels = c("N", "P", "N:P")) +
   # xlim(-2,3) +
   theme_classic() +
   labs(x = "Normalised range", y = "Density") +
-  # geom_vline(xintercept = 1, linetype = "dotted") +
   theme(legend.title = element_blank())
 
 gg_ranges
 ggsave(paste0(here::here(), "/fig/tga_ranges_density.pdf"), width = 7, height = 5)
 
 # mean slopes by family: N
-df_tga %>% 
+df_tga |> 
   group_by(Family) %>% 
   summarise(slope_n = mean(slope_n)) %>% 
   mutate(Family = fct_reorder(Family, slope_n)) %>% 
@@ -416,7 +423,7 @@ df_tga %>%
 ggsave(paste0(here::here(), "/fig/tga_slopes_bars_leafn.pdf"), width = 7, height = 10)
 
 # mean slopes by family: P
-df_tga %>% 
+df_tga|> 
   group_by(Family) %>% 
   summarise(slope_p = mean(slope_p)) %>% 
   mutate(Family = fct_reorder(Family, slope_p)) %>% 
@@ -433,7 +440,7 @@ df_tga %>%
 ggsave(paste0(here::here(), "/fig/tga_slopes_bars_leafp.pdf"), width = 7, height = 10)
 
 # mean slopes of most common species: N
-gg_slopes_species_n <- df_tga %>% 
+gg_slopes_species_n <- df_tga|> 
   filter(Species %in% common_species) |> 
   group_by(Species) %>%
   summarise(slope_n = mean(slope_n)) %>%
@@ -531,7 +538,7 @@ gg1 <- df_tga |>
   ggridges::geom_density_ridges(scale = 2) + 
   xlim(-2, 3) +
   coord_cartesian(clip = "off") + # to avoid clipping of the very top of the top ridgeline
-  theme_ridges() +
+  ggridges::theme_ridges() +
   geom_vline(xintercept = c(0,1), linetype = "dotted") +
   labs(title = "Leaf N", x = "Slope")
 
@@ -546,7 +553,7 @@ gg2 <- df_tga |>
   ggridges::geom_density_ridges(scale = 2) + 
   xlim(-2, 3) +
   coord_cartesian(clip = "off") + # to avoid clipping of the very top of the top ridgeline
-  theme_ridges() +
+  ggridges::theme_ridges() +
   geom_vline(xintercept = c(0,1), linetype = "dotted") +
   labs(title = "Leaf P", x = "Slope")
 
@@ -561,7 +568,7 @@ gg3 <- df_tga |>
   ggridges::geom_density_ridges(scale = 2) + 
   xlim(-2, 3) +
   coord_cartesian(clip = "off") + # to avoid clipping of the very top of the top ridgeline
-  theme_ridges() +
+  ggridges::theme_ridges() +
   geom_vline(xintercept = c(0,1), linetype = "dotted") +
   labs(title = "Leaf N:P", x = "Slope")
 
@@ -603,13 +610,19 @@ out <- df_tga |>
 out$gg
 
 # correlation of ranges for N and P
+r_pearson <- format(cor(df_tga$range_n, df_tga$range_p), digits = 2)
 df_tga |> 
   # remove outliers
   filter(slope_n > -5, slope_n < 5, slope_p > -5, slope_p < 5) |> 
   ggplot(aes(range_n, range_p)) +
-  geom_point()
-
-cor(df_tga$range_n, df_tga$range_p)
+  geom_point() +
+  labs(x = expression(paste("Leaf N range (g N (g DM)"^-1, ")")),
+       y = expression(paste("Leaf P range (g P (g DM)"^-1, ")")),
+       subtitle = bquote( italic(r) == .(r_pearson) )
+      ) +
+  theme_classic()
+ggsave(paste0(here::here(), "/fig/cor_ranges.pdf"), width = 5, height = 5)
+ggsave(paste0(here::here(), "/fig/cor_ranges.png"), width = 5, height = 5)
 ```
 
 ## Species variation decomposition

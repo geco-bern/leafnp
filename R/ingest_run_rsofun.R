@@ -239,7 +239,7 @@ ingest_run_rsofun <- function(siteinfo, ichunk = "X", totchunk = "XX", verbose =
     dplyr::select(-data) %>% 
     right_join(df_output, by = "sitename") %>% 
     left_join(df_aet, by = "sitename") %>% 
-    mutate(ai = map / aet)
+    mutate(ai = map / aet) # should be pet instead of aet xxx 
   
   ## add S_CWDX80 to output as an additional climate index
   df_output <- df_output %>% 
