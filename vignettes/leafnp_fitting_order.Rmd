@@ -2,7 +2,7 @@
 title: "Analyse order of predictors in fitting models"
 author: "Beni Stocker"
 date: "2022-07-28"
-output: html_document
+output: pdf_document
 ---
 
 This is based on the script shared by Bernhard Schmid and contained also this repo (`analysis/TianDiMay23_BS.R`).
@@ -10,26 +10,14 @@ This is based on the script shared by Bernhard Schmid and contained also this re
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
-library(ranger)
-library(caret)
-library(visdat)
-library(vip)
-library(pdp)
-library(nnet)
-library(recipes)
 library(knitr)
-library(forcats)
-library(cowplot)
 
 library(bestNormalize)
-library(metafor)
 library(nlme)
 # library(lme4)
 library(lmerTest)
 library(effects)
 library(ggeffects)
-library(MuMIn) # This is the same as Sardan's 2020,output r^2 of the model
-library(glmm.hp) # to get specific r^2
 library(performance)
 
 df_model_fitting <- tibble()
@@ -50,14 +38,6 @@ trgts <- c("leafN", "leafP", "LeafNP")
 
 ## predictors excluding PHO, and TS (too many missing)
 preds <- c("elv", "mat", "matgs", "tmonthmin", "tmonthmax", "ndaysgs", "mai", "maigs", "map", "pmonthmin", "mapgs", "mavgs", "mav", "alpha", "vcmax25", "jmax25", "gs_accl", "aet", "ai", "cwdx80", "gti", "ndep", "co2", "T_BULK_DENSITY", "AWC_CLASS", "T_CLAY", "T_SILT", "T_SAND", "T_GRAVEL", "T_PH_H2O", "T_TEB", "T_BS", "T_CEC_SOIL", "T_CEC_CLAY", "T_ECE", "T_ESP", "T_CACO3", "T_OC", "ORGC", "TOTN", "CNrt", "ALSA", "PBR", "TP", "TK")
-
-preds_soil <- c("gti", "ndep", "T_BULK_DENSITY", "AWC_CLASS", "T_CLAY", "T_SILT", "T_SAND", "T_GRAVEL", "T_PH_H2O", "T_TEB", "T_BS", "T_CEC_SOIL", "T_CEC_CLAY", "T_ECE", "T_ESP", "T_CACO3", "T_OC", "ORGC", "TOTN", "CNrt", "ALSA", "PBR", "TP", "TK")
-  
-preds_climate <- c( "elv", "co2", "mat", "matgs", "tmonthmin", "tmonthmax", "ndaysgs", "mai", "maigs", "map", "pmonthmin", "mapgs", "mavgs", "mav", "alpha", "vcmax25", "jmax25", "gs_accl", "aet", "ai", "cwdx80")
-
-preds_pmodeloutputs <- c("vcmax25", "jmax25", "gs_accl")
-
-preds_pmodelinputs <- c("mat", "matgs", "mai", "maigs", "mav", "mavgs", "elv", "co2")
 ```
 
 Filter to use only data from species that were recorded in at least five different sites.

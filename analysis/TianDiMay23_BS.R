@@ -32,8 +32,8 @@ library(lme4)
 library(lmerTest)
 library(effects)
 library(ggeffects)
-# library(asreml) #this is not free ##Di has no this, can only use others
-# library(pascal) #from Pascal Niklaus to go with asreml
+library(asreml) #this is not free ##Di has no this, can only use others
+library(pascal) #from Pascal Niklaus to go with asreml
 library(readr)
 
 # Read in data and prepare ---------------------
@@ -65,13 +65,17 @@ dat$ID <- factor(dat$id);nlevels(dat$ID)
 # OLS --------------
 ## leaf N ~ Family -----------
 y <- log(dat$leafN)
-lm1 <- lm(y ~ FA, na.action = na.exclude, data = dat)
+lm1 <- lm(y ~ FA, 
+          na.action = na.exclude, 
+          data = dat)
 anova(lm1)
 par(mfrow=c(2,2))
 plot(lm1)
 
 ## leaf N ~ Species + Site -----------
-lm2 <- lm(y ~ SP + SITE, na.action = na.exclude, data = dat)  # may take > 1 hour
+lm2 <- lm(y ~ SP + SITE, 
+          na.action = na.exclude, 
+          data = dat)  # may take > 1 hour
 anova(lm2)
 saveRDS(lm2, file = paste0(here::here(), "/data/lm2.rds"))
 
@@ -82,7 +86,9 @@ saveRDS(lm2, file = paste0(here::here(), "/data/lm2.rds"))
 #Residuals 25382    712   0.028  
 
 ## leaf N ~ ENV. + Species (fixed) --------------
-lm2b <- lm(y ~ SP + ALSA + mav + elv + co2 + tmonthmin + mai + ndep, na.action = na.exclude, data = dat)
+lm2b <- lm(y ~ SP + ALSA + mav + elv + co2 + tmonthmin + mai + ndep, 
+           na.action = na.exclude, 
+           data = dat)
 anova(lm2b) 
 saveRDS(lm2b, file = paste0(here::here(), "/data/lm2b.rds"))
 

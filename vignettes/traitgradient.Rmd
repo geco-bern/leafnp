@@ -456,7 +456,7 @@ gg_slopes_species_n <- df_tga|>
               distinct(),
             by = "Species") |> 
   mutate(Species = fct_reorder(Species, slope_n)) %>% 
-  ggplot(aes(Species, slope_n, fill = Family)) +
+  ggplot(aes(Species, slope_n)) +   # , fill = Family
   geom_bar(stat = "identity", show.legend = FALSE) +
   coord_flip() +
   theme_classic() +
@@ -464,7 +464,7 @@ gg_slopes_species_n <- df_tga|>
   geom_hline(yintercept = 1.0, linetype = "dotted") +
   geom_hline(yintercept = 0.0) +
   # scale_fill_manual(values = as.vector(pals::stepped(18)))
-  khroma::scale_fill_discreterainbow() +
+  # khroma::scale_fill_discreterainbow() +
   theme(axis.text.y = element_text(face = "italic"))
 
 gg_slopes_species_n
@@ -482,14 +482,14 @@ gg_slopes_species_p <- df_tga |>
               distinct(),
             by = "Species") |> 
   mutate(Species = fct_reorder(Species, slope_p)) |> 
-  ggplot(aes(Species, slope_p, fill = Family)) +
+  ggplot(aes(Species, slope_p)) +     # , fill = Family
   geom_bar(stat = "identity", show.legend = FALSE) +
   coord_flip() +
   theme_classic() +
   labs(y = "Slope", title = "Leaf P") +
   geom_hline(yintercept = 1.0, linetype = "dotted") +
   geom_hline(yintercept = 0.0) +
-  khroma::scale_fill_discreterainbow() +
+  # khroma::scale_fill_discreterainbow() +
   theme(axis.text.y = element_text(face = "italic"))
 
 gg_slopes_species_p
@@ -507,14 +507,14 @@ gg_slopes_species_np <- df_tga |>
               distinct(),
             by = "Species") |> 
   mutate(Species = fct_reorder(Species, slope_np)) |> 
-  ggplot(aes(Species, slope_np, fill = Family)) +
+  ggplot(aes(Species, slope_np)) +     # , fill = Family
   geom_bar(stat = "identity") +
   coord_flip() +
   theme_classic() +
   labs(y = "Slope", title = "Leaf N:P") +
   geom_hline(yintercept = 1.0, linetype = "dotted") +
   geom_hline(yintercept = 0.0) +
-  khroma::scale_fill_discreterainbow() +
+  # khroma::scale_fill_discreterainbow() +
   theme(axis.text.y = element_text(face = "italic"))
 
 gg_slopes_species_np
@@ -870,7 +870,7 @@ midrow <- cowplot::plot_grid(gg_slopes, gg_ranges, gg_part, labels = c("d", "e",
 midrow
 ggsave(paste0(here::here(), "/fig/tga_log_mid.pdf"), width = 12, height = 4)
 
-bottomrow <- cowplot::plot_grid(gg_slopes_species_n, gg_slopes_species_p, gg_slopes_species_np, labels = c("g", "h", "i"), ncol = 3, rel_widths = c(0.65, 0.65, 1))
+bottomrow <- cowplot::plot_grid(gg_slopes_species_n, gg_slopes_species_p, gg_slopes_species_np, labels = c("g", "h", "i"), ncol = 3)  # , rel_widths = c(0.65, 0.65, 1)
 bottomrow
 ggsave(paste0(here::here(), "/fig/tga_log_bottom.pdf"), width = 12, height = 5)
 
