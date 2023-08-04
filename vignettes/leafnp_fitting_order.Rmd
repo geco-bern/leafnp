@@ -1,0 +1,223 @@
+---
+title: "Analyse order of predictors in fitting models"
+author: "Beni Stocker"
+date: "2022-07-28"
+output: html_document
+---
+
+This is based on the script shared by Bernhard Schmid and contained also this repo (`analysis/TianDiMay23_BS.R`).
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(ranger)
+library(caret)
+library(visdat)
+library(vip)
+library(pdp)
+library(nnet)
+library(recipes)
+library(knitr)
+library(forcats)
+library(cowplot)
+
+library(bestNormalize)
+library(metafor)
+library(nlme)
+# library(lme4)
+library(lmerTest)
+library(effects)
+library(ggeffects)
+library(MuMIn) # This is the same as Sardan's 2020,output r^2 of the model
+library(glmm.hp) # to get specific r^2
+library(performance)
+
+df_model_fitting <- tibble()
+overwrite <- FALSE
+```
+
+## Read and pre-process data
+
+Read full species-level data
+```{r}
+df <- read_csv("~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/leafnp_data_covariates_20210702.csv") %>% 
+  mutate(grass = tree_shrub_Herb == "H")  
+```
+
+Define predictor sets.
+```{r}
+trgts <- c("leafN", "leafP", "LeafNP")
+
+## predictors excluding PHO, and TS (too many missing)
+preds <- c("elv", "mat", "matgs", "tmonthmin", "tmonthmax", "ndaysgs", "mai", "maigs", "map", "pmonthmin", "mapgs", "mavgs", "mav", "alpha", "vcmax25", "jmax25", "gs_accl", "aet", "ai", "cwdx80", "gti", "ndep", "co2", "T_BULK_DENSITY", "AWC_CLASS", "T_CLAY", "T_SILT", "T_SAND", "T_GRAVEL", "T_PH_H2O", "T_TEB", "T_BS", "T_CEC_SOIL", "T_CEC_CLAY", "T_ECE", "T_ESP", "T_CACO3", "T_OC", "ORGC", "TOTN", "CNrt", "ALSA", "PBR", "TP", "TK")
+
+preds_soil <- c("gti", "ndep", "T_BULK_DENSITY", "AWC_CLASS", "T_CLAY", "T_SILT", "T_SAND", "T_GRAVEL", "T_PH_H2O", "T_TEB", "T_BS", "T_CEC_SOIL", "T_CEC_CLAY", "T_ECE", "T_ESP", "T_CACO3", "T_OC", "ORGC", "TOTN", "CNrt", "ALSA", "PBR", "TP", "TK")
+  
+preds_climate <- c( "elv", "co2", "mat", "matgs", "tmonthmin", "tmonthmax", "ndaysgs", "mai", "maigs", "map", "pmonthmin", "mapgs", "mavgs", "mav", "alpha", "vcmax25", "jmax25", "gs_accl", "aet", "ai", "cwdx80")
+
+preds_pmodeloutputs <- c("vcmax25", "jmax25", "gs_accl")
+
+preds_pmodelinputs <- c("mat", "matgs", "mai", "maigs", "mav", "mavgs", "elv", "co2")
+```
+
+Filter to use only data from species that were recorded in at least five different sites.
+```{r}
+# yields 398 species
+use_species <- df %>% 
+  dplyr::select(sitename, Species) %>% 
+  distinct() %>% 
+  group_by(Species) %>% 
+  summarise(n = n()) %>% 
+  dplyr::filter(n >= 5) %>% 
+  pull(Species)
+```
+
+Additionally, analogous to how it's done for the trait gradient analysis, use data only for sites where at least M species are present.
+```{r}
+use_sites <- df %>% 
+  dplyr::select(sitename, Species) %>% 
+  distinct() %>% 
+  group_by(sitename) %>% 
+  summarise(n = n()) %>% 
+  dplyr::filter(n >= 5) %>% 
+  pull(sitename)
+```
+
+Apply filtering.
+```{r}
+df <- df %>% 
+  dplyr::filter(Species %in% use_species & sitename %in% use_sites)
+```
+
+Prepare date for linear mixed effects modelling. Do data pre-processing as Di Tian implemented it. Transformations are required, but not for Random Forest modelling. Therefore, define separate data objects for the two model types.
+
+Make factors and numeric. No capping to positive numbers done here (as opposed to Di Tian's).
+```{r}
+df_lmm <- df %>%
+  # drop_na() %>%
+  rename( 
+    SITE = sitename,
+    SP = Species, 
+    FG = FunGroups, 
+    TG = tree_shrub_Herb, 
+    FGID = Dc_Db_Ec_Eb_Hf_Hg,
+    FA = Family, 
+    GE = Genus, 
+    ID = id
+    ) %>%
+  mutate(across(all_of(c("SITE", "FG", "FGID", "TG", "FA", "GE", "SP", "ID")), factor)) %>%
+  mutate(across(all_of(preds), as.numeric))
+```
+
+<!-- Apply Yeo-Johnson transformation to make predictors more normally distributed. -->
+<!-- ```{r} -->
+<!-- predict_yeojohnson <- function(x){ -->
+<!--   # x[x < 0] <- 0   # How Di did it -->
+<!--   predict( yeojohnson( x ) ) -->
+<!-- } -->
+
+<!-- df_lmm <- df_lmm %>% -->
+<!--   mutate(across(all_of(preds), predict_yeojohnson)) -->
+<!-- ``` -->
+
+## ANOVA for differet model specifications
+
+### LM with species first
+
+```{r}
+# lmm2 <- lme4::lmer(
+#   log(leafN) ~ SP + ALSA + mav + elv + co2 + tmonthmin + mai + ndep +
+#     (1|SITE),
+#   data = df_lmm |>
+#     drop_na()
+#   )
+
+lmm2 <- lm(
+  terms(log(leafN) ~ SP + (ALSA + mav + elv + co2 + tmonthmin + mai + ndep),
+        keep.order = TRUE),
+  data = df_lmm |>
+    drop_na())
+
+df_ss2 <- as_tibble(anova(lmm2), rownames = "Predictor") |> 
+  select(Predictor, `Species first`=`Sum Sq`)
+
+df_ss2_sum <- df_ss2 |> 
+  summarise(`Species first` = sum(`Species first`))
+
+df_ss2 <- df_ss2 |> 
+  mutate(`Species first (%)` = `Species first`/df_ss2_sum$`Species first`)
+```
+
+### LM with species last
+
+```{r}
+# lmm3 <- lm(
+#   log(leafN) ~ ALSA + mav + elv + co2 + tmonthmin + mai + ndep + SP,
+#   data = df_lmm |>
+#     drop_na()
+#   )
+
+lmm3 <- lm(
+  terms(log(leafN) ~ (ALSA + mav + elv + co2 + tmonthmin + mai + ndep) + SP,
+        keep.order = TRUE),
+  data = df_lmm |>
+    drop_na())
+
+df_ss3 <- as_tibble(anova(lmm3), rownames = "Predictor") |> 
+  select(Predictor, `Species last`=`Sum Sq`)
+
+df_ss3_sum <- df_ss3 |> 
+  summarise(`Species last` = sum(`Species last`))
+
+df_ss3 <- df_ss3 |> 
+  mutate(`Species last (%)` = `Species last`/df_ss3_sum$`Species last`)
+```
+
+### LMM with species as random
+
+```{r}
+lmm4 <- lme4::lmer(
+  log(leafN) ~ ALSA + mav + elv + co2 + tmonthmin + mai + ndep +
+    (1|SP),
+  data = df_lmm |>
+    drop_na()
+  )
+
+# lmm4 <- lme(
+# 
+#   log(leafN) ~ ALSA + mav + elv + co2 + tmonthmin + mai + ndep,
+#   random = ~1|SP,
+#   data = df_lmm |> 
+#     drop_na()
+# 
+#   )
+
+df_ss4 <- as_tibble(anova(lmm4), rownames = "Predictor") |> 
+  select(Predictor, `Species as random`=`Sum Sq`)
+
+df_ss4_sum <- df_ss4 |> 
+  summarise(`Species as random` = sum(`Species as random`))
+
+df_ss4 <- df_ss4 |> 
+  mutate(`Species as random (%)` = `Species as random`/df_ss4_sum$`Species as random`)
+```
+
+Sum of squares for each predictor in the three different models.
+```{r}
+df_ss2 |> 
+  left_join(
+    df_ss3,
+    by = "Predictor"
+  ) |> 
+  left_join(
+    df_ss4,
+    by = "Predictor"
+  ) |> 
+  mutate(
+    `Species first` = format(`Species first`, digits = 2),
+    `Species last` = format(`Species last`, digits = 2),
+    `Species as random` = format(`Species as random`, digits = 2)
+  ) |> 
+  select(c(1,2,4,6)) |> 
+  knitr::kable()
+```
