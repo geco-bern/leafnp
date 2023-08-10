@@ -273,14 +273,20 @@ df_shared <- tibble(
   site_plus = df_site_species |> 
     select(Predictor, species_last) |> 
     filter(Predictor == "SITE") |> 
-    pull(species_last)
+    pull(species_last),
+  residuals = df_site_species |> 
+    select(Predictor, species_first) |> 
+    filter(Predictor == "Residuals") |> 
+    pull(species_first)
 ) |> 
   mutate(
     shared_a = species_plus - species,
     shared_b = site_plus - site
   )
 
-total <- df_shared$species_plus + df_shared$site
+total <- df_shared$species_plus + 
+  df_shared$site + 
+  dplyr::filter(df_site_species, Predictor == "Residuals")$species_first
 
 df_shared_perc <- df_shared |> 
   mutate(across(1:6, ~ 100*(. / total)))
@@ -304,11 +310,16 @@ gg_n <- ggplot(df_venn,
            label = paste0("Shared \n ", 
                           format(df_shared_perc$shared_a, digits = 2), 
                           "%")) +
-  annotate("text", x = 17 , y = 0, 
+  annotate("text", x = 15 , y = 0, 
            label = paste0("Species \n ", 
                           format(df_shared_perc$species, digits = 2), 
                           "%")) +
-  labs(title = "Leaf N")
+  labs(title = "Leaf N", 
+       subtitle = paste0("Residuals = ", 
+                         format(df_shared_perc$residuals, digits = 2),
+                         "%"))
+
+gg_n
 ```
 
 ## Venn diagram for leaf P
@@ -382,14 +393,20 @@ df_shared <- tibble(
   site_plus = df_site_species |> 
     select(Predictor, species_last) |> 
     filter(Predictor == "SITE") |> 
-    pull(species_last)
+    pull(species_last),
+  residuals = df_site_species |> 
+    select(Predictor, species_first) |> 
+    filter(Predictor == "Residuals") |> 
+    pull(species_first)
 ) |> 
   mutate(
     shared_a = species_plus - species,
     shared_b = site_plus - site
   )
 
-total <- df_shared$species_plus + df_shared$site
+total <- df_shared$species_plus + 
+  df_shared$site + 
+  dplyr::filter(df_site_species, Predictor == "Residuals")$species_first
 
 df_shared_perc <- df_shared |> 
   mutate(across(1:6, ~ 100*(. / total)))
@@ -406,18 +423,21 @@ gg_p <- ggplot(df_venn,
   coord_fixed() +
   scale_fill_manual(values=c("#29a274ff", "#777055ff")) +
   theme_void() +
-  annotate("text", x = -15 , y = 0, label = paste0("Site \n ", 
+  annotate("text", x = -15.5 , y = 0, label = paste0("Site \n ", 
                           format(df_shared_perc$site, digits = 2), 
                           "%")) +
   annotate("text", x = 3 , y = 0, 
            label = paste0("Shared \n ", 
                           format(df_shared_perc$shared_a, digits = 2), 
                           "%")) +
-  annotate("text", x = 24 , y = 0, 
+  annotate("text", x = 26 , y = 0, 
            label = paste0("Species \n ", 
                           format(df_shared_perc$species, digits = 2), 
                           "%")) +
-  labs(title = "Leaf P")
+  labs(title = "Leaf P", 
+       subtitle = paste0("Residuals = ", 
+                         format(df_shared_perc$residuals, digits = 2),
+                         "%"))
 
 gg_p
 ```
@@ -493,14 +513,20 @@ df_shared <- tibble(
   site_plus = df_site_species |> 
     select(Predictor, species_last) |> 
     filter(Predictor == "SITE") |> 
-    pull(species_last)
+    pull(species_last),
+  residuals = df_site_species |> 
+    select(Predictor, species_first) |> 
+    filter(Predictor == "Residuals") |> 
+    pull(species_first)
 ) |> 
   mutate(
     shared_a = species_plus - species,
     shared_b = site_plus - site
   )
 
-total <- df_shared$species_plus + df_shared$site
+total <- df_shared$species_plus + 
+  df_shared$site + 
+  dplyr::filter(df_site_species, Predictor == "Residuals")$species_first
 
 df_shared_perc <- df_shared |> 
   mutate(across(1:6, ~ 100*(. / total)))
@@ -528,7 +554,10 @@ gg_np <- ggplot(df_venn,
            label = paste0("Species \n ", 
                           format(df_shared_perc$species, digits = 2), 
                           "%")) +
-  labs(title = "Leaf N:P")
+  labs(title = "Leaf N:P", 
+       subtitle = paste0("Residuals = ", 
+                         format(df_shared_perc$residuals, digits = 2),
+                         "%"))
 
 gg_np
 ```
