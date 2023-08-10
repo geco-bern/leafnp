@@ -164,14 +164,14 @@ df_tga %>%
   xlim(-2,3) + 
   theme_classic()
 
-df_tga %>% 
-  group_by(Family) %>% 
-  summarise(slope_n = mean(slope_n)) %>% 
-  mutate(Family = fct_reorder(Family, slope_n)) %>% 
-  drop_na() %>% 
-  ggplot(aes(Family, slope_n)) +
-  geom_bar(stat = "identity") +
-  coord_flip()
+# df_tga %>% 
+#   group_by(Family) %>% 
+#   summarise(slope_n = mean(slope_n)) %>% 
+#   mutate(Family = fct_reorder(Family, slope_n)) %>% 
+#   drop_na() %>% 
+#   ggplot(aes(Family, slope_n)) +
+#   geom_bar(stat = "identity") +
+#   coord_flip()
 
 ```
 

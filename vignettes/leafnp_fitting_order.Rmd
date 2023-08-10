@@ -105,13 +105,7 @@ df_lmm <- df %>%
 ### LM with species first
 
 ```{r}
-# lmm2 <- lme4::lmer(
-#   log(leafN) ~ SP + ALSA + mav + elv + co2 + tmonthmin + mai + ndep +
-#     (1|SITE),
-#   data = df_lmm |>
-#     drop_na()
-#   )
-
+# individual environmental factors
 lmm2 <- lm(
   terms(log(leafN) ~ SP + (ALSA + mav + elv + co2 + tmonthmin + mai + ndep),
         keep.order = TRUE),
@@ -131,12 +125,7 @@ df_ss2 <- df_ss2 |>
 ### LM with species last
 
 ```{r}
-# lmm3 <- lm(
-#   log(leafN) ~ ALSA + mav + elv + co2 + tmonthmin + mai + ndep + SP,
-#   data = df_lmm |>
-#     drop_na()
-#   )
-
+# individual environmental factors
 lmm3 <- lm(
   terms(log(leafN) ~ (ALSA + mav + elv + co2 + tmonthmin + mai + ndep) + SP,
         keep.order = TRUE),
@@ -156,13 +145,7 @@ df_ss3 <- df_ss3 |>
 ### LMM with species as random
 
 ```{r}
-lmm4 <- lme4::lmer(
-  log(leafN) ~ ALSA + mav + elv + co2 + tmonthmin + mai + ndep +
-    (1|SP),
-  data = df_lmm |>
-    drop_na()
-  )
-
+# lmer package
 # lmm4 <- lme(
 # 
 #   log(leafN) ~ ALSA + mav + elv + co2 + tmonthmin + mai + ndep,
@@ -172,14 +155,31 @@ lmm4 <- lme4::lmer(
 # 
 #   )
 
-df_ss4 <- as_tibble(anova(lmm4), rownames = "Predictor") |> 
+# lme4 package, individual environmental factors
+lmm4 <- lme4::lmer(
+  log(leafN) ~ ALSA + mav + elv + co2 + tmonthmin + mai + ndep +
+    (1|SP),
+  data = df_lmm |>
+    drop_na()
+  )
+
+df_ss4 <- as_tibble(anova(lmm4), rownames = "Predictor") |>
   select(Predictor, `Species as random`=`Sum Sq`)
 
-df_ss4_sum <- df_ss4 |> 
+df_ss4_sum <- df_ss4 |>
   summarise(`Species as random` = sum(`Species as random`))
 
-df_ss4 <- df_ss4 |> 
+df_ss4 <- df_ss4 |>
   mutate(`Species as random (%)` = `Species as random`/df_ss4_sum$`Species as random`)
+
+# # lme4 package, all environmental factors wrapped into site
+# lmm4 <- lme4::lmer(
+#   log(leafN) ~ 1 + (1|SP) + (1|SITE),
+#   data = df_lmm |>
+#     drop_na()
+#   )
+# 
+# summary(lmm4)
 ```
 
 Sum of squares for each predictor in the three different models.
@@ -200,4 +200,342 @@ df_ss2 |>
   ) |> 
   select(c(1,2,4,6)) |> 
   knitr::kable()
+```
+
+## Venn diagram for leaf N
+
+Here, site summarises all possible environmental factors.
+
+### Species first
+
+```{r}
+mod1 <- lm(
+  terms(log(leafN) ~ SP + SITE,
+        keep.order = TRUE),
+  data = df_lmm |>
+    drop_na())
+
+df1 <- as_tibble(anova(mod1), rownames = "Predictor") |>
+  select(Predictor, species_first=`Sum Sq`)
+
+df1_sum <- df1 |>
+  summarise(species_first = sum(species_first))
+
+df1 <- df1 |>
+  mutate(species_first_perc = species_first/df1_sum$species_first)
+```
+
+### Species last
+
+```{r}
+mod2 <- lm(
+  terms(log(leafN) ~ SITE + SP,
+        keep.order = TRUE),
+  data = df_lmm |>
+    drop_na())
+
+df2 <- as_tibble(anova(mod2), rownames = "Predictor") |>
+  select(Predictor, species_last=`Sum Sq`)
+
+df2_sum <- df2 |>
+  summarise(species_last = sum(species_last))
+
+df2 <- df2 |>
+  mutate(species_last_perc = species_last/df2_sum$species_last)
+```
+
+```{r}
+df_site_species <- df1 |> 
+  left_join(
+    df2,
+    by = "Predictor"
+  )
+
+df_site_species |> knitr::kable()
+```
+
+### Plot
+
+```{r}
+df_shared <- tibble(
+  species = df_site_species |> 
+    select(Predictor, species_last) |> 
+    filter(Predictor == "SP") |> 
+    pull(species_last),
+  site = df_site_species |> 
+    select(Predictor, species_first) |> 
+    filter(Predictor == "SITE") |> 
+    pull(species_first),
+  species_plus = df_site_species |> 
+    select(Predictor, species_first) |> 
+    filter(Predictor == "SP") |> 
+    pull(species_first),
+  site_plus = df_site_species |> 
+    select(Predictor, species_last) |> 
+    filter(Predictor == "SITE") |> 
+    pull(species_last)
+) |> 
+  mutate(
+    shared_a = species_plus - species,
+    shared_b = site_plus - site
+  )
+
+total <- df_shared$species_plus + df_shared$site
+
+df_shared_perc <- df_shared |> 
+  mutate(across(1:6, ~ 100*(. / total)))
+
+df_venn <- tibble(x = c(0,7),
+                  y = c(0,0),
+                  r = c(sqrt(df_shared$site_plus), sqrt(df_shared$species_plus)),
+                  id = c("site", "species")
+                  )
+
+gg_n <- ggplot(df_venn, 
+             aes(x0 = x, y0 = y, r = r, fill = id)) +
+  ggforce::geom_circle(alpha = .5, show.legend = FALSE ) +
+  coord_fixed() +
+  scale_fill_manual(values=c("#29a274ff", "#777055ff")) +
+  theme_void() +
+  annotate("text", x = -10 , y = 0, label = paste0("Site \n ", 
+                          format(df_shared_perc$site, digits = 2), 
+                          "%")) +
+  annotate("text", x = 3 , y = 0, 
+           label = paste0("Shared \n ", 
+                          format(df_shared_perc$shared_a, digits = 2), 
+                          "%")) +
+  annotate("text", x = 21 , y = 0, 
+           label = paste0("Species \n ", 
+                          format(df_shared_perc$species, digits = 2), 
+                          "%")) +
+  labs(title = "Leaf N")
+```
+
+## Venn diagram for leaf P
+
+Here, site summarises all possible environmental factors.
+
+### Species first
+
+```{r}
+mod1 <- lm(
+  terms(log(leafP) ~ SP + SITE,
+        keep.order = TRUE),
+  data = df_lmm |>
+    drop_na())
+
+df1 <- as_tibble(anova(mod1), rownames = "Predictor") |>
+  select(Predictor, species_first=`Sum Sq`)
+
+df1_sum <- df1 |>
+  summarise(species_first = sum(species_first))
+
+df1 <- df1 |>
+  mutate(species_first_perc = species_first/df1_sum$species_first)
+```
+
+### Species last
+
+```{r}
+mod2 <- lm(
+  terms(log(leafP) ~ SITE + SP,
+        keep.order = TRUE),
+  data = df_lmm |>
+    drop_na())
+
+df2 <- as_tibble(anova(mod2), rownames = "Predictor") |>
+  select(Predictor, species_last=`Sum Sq`)
+
+df2_sum <- df2 |>
+  summarise(species_last = sum(species_last))
+
+df2 <- df2 |>
+  mutate(species_last_perc = species_last/df2_sum$species_last)
+```
+
+```{r}
+df_site_species <- df1 |> 
+  left_join(
+    df2,
+    by = "Predictor"
+  )
+
+df_site_species |> knitr::kable()
+```
+
+### Plot
+
+```{r}
+df_shared <- tibble(
+  species = df_site_species |> 
+    select(Predictor, species_last) |> 
+    filter(Predictor == "SP") |> 
+    pull(species_last),
+  site = df_site_species |> 
+    select(Predictor, species_first) |> 
+    filter(Predictor == "SITE") |> 
+    pull(species_first),
+  species_plus = df_site_species |> 
+    select(Predictor, species_first) |> 
+    filter(Predictor == "SP") |> 
+    pull(species_first),
+  site_plus = df_site_species |> 
+    select(Predictor, species_last) |> 
+    filter(Predictor == "SITE") |> 
+    pull(species_last)
+) |> 
+  mutate(
+    shared_a = species_plus - species,
+    shared_b = site_plus - site
+  )
+
+total <- df_shared$species_plus + df_shared$site
+
+df_shared_perc <- df_shared |> 
+  mutate(across(1:6, ~ 100*(. / total)))
+
+df_venn <- tibble(x = c(0,9),
+                  y = c(0,0),
+                  r = c(sqrt(df_shared$site_plus), sqrt(df_shared$species_plus)),
+                  id = c("site", "species")
+                  )
+
+gg_p <- ggplot(df_venn, 
+             aes(x0 = x, y0 = y, r = r, fill = id)) +
+  ggforce::geom_circle(alpha = .5, show.legend = FALSE ) +
+  coord_fixed() +
+  scale_fill_manual(values=c("#29a274ff", "#777055ff")) +
+  theme_void() +
+  annotate("text", x = -12.5 , y = 0, label = paste0("Site \n ", 
+                          format(df_shared_perc$site, digits = 2), 
+                          "%")) +
+  annotate("text", x = 3 , y = 0, 
+           label = paste0("Shared \n ", 
+                          format(df_shared_perc$shared_a, digits = 2), 
+                          "%")) +
+  annotate("text", x = 21.5 , y = 0, 
+           label = paste0("Species \n ", 
+                          format(df_shared_perc$species, digits = 2), 
+                          "%")) +
+  labs(title = "Leaf P")
+
+gg_p
+```
+
+## Venn diagram for leaf N:P
+
+Here, site summarises all possible environmental factors.
+
+### Species first
+
+```{r}
+mod1 <- lm(
+  terms(log(LeafNP) ~ SP + SITE,
+        keep.order = TRUE),
+  data = df_lmm |>
+    drop_na())
+
+df1 <- as_tibble(anova(mod1), rownames = "Predictor") |>
+  select(Predictor, species_first=`Sum Sq`)
+
+df1_sum <- df1 |>
+  summarise(species_first = sum(species_first))
+
+df1 <- df1 |>
+  mutate(species_first_perc = species_first/df1_sum$species_first)
+```
+
+### Species last
+
+```{r}
+mod2 <- lm(
+  terms(log(LeafNP) ~ SITE + SP,
+        keep.order = TRUE),
+  data = df_lmm |>
+    drop_na())
+
+df2 <- as_tibble(anova(mod2), rownames = "Predictor") |>
+  select(Predictor, species_last=`Sum Sq`)
+
+df2_sum <- df2 |>
+  summarise(species_last = sum(species_last))
+
+df2 <- df2 |>
+  mutate(species_last_perc = species_last/df2_sum$species_last)
+```
+
+```{r}
+df_site_species <- df1 |> 
+  left_join(
+    df2,
+    by = "Predictor"
+  )
+
+df_site_species |> knitr::kable()
+```
+
+### Plot
+
+```{r}
+df_shared <- tibble(
+  species = df_site_species |> 
+    select(Predictor, species_last) |> 
+    filter(Predictor == "SP") |> 
+    pull(species_last),
+  site = df_site_species |> 
+    select(Predictor, species_first) |> 
+    filter(Predictor == "SITE") |> 
+    pull(species_first),
+  species_plus = df_site_species |> 
+    select(Predictor, species_first) |> 
+    filter(Predictor == "SP") |> 
+    pull(species_first),
+  site_plus = df_site_species |> 
+    select(Predictor, species_last) |> 
+    filter(Predictor == "SITE") |> 
+    pull(species_last)
+) |> 
+  mutate(
+    shared_a = species_plus - species,
+    shared_b = site_plus - site
+  )
+
+total <- df_shared$species_plus + df_shared$site
+
+df_shared_perc <- df_shared |> 
+  mutate(across(1:6, ~ 100*(. / total)))
+
+df_venn <- tibble(x = c(0,9),
+                  y = c(0,0),
+                  r = c(sqrt(df_shared$site_plus), sqrt(df_shared$species_plus)),
+                  id = c("site", "species")
+                  )
+
+gg_np <- ggplot(df_venn, 
+             aes(x0 = x, y0 = y, r = r, fill = id)) +
+  ggforce::geom_circle(alpha = .5, show.legend = FALSE ) +
+  coord_fixed() +
+  scale_fill_manual(values=c("#29a274ff", "#777055ff")) +
+  theme_void() +
+  annotate("text", x = -10.5 , y = 0, label = paste0("Site \n ", 
+                          format(df_shared_perc$site, digits = 2), 
+                          "%")) +
+  annotate("text", x = 3 , y = 0, 
+           label = paste0("Shared \n ", 
+                          format(df_shared_perc$shared_a, digits = 2), 
+                          "%")) +
+  annotate("text", x = 21 , y = 0, 
+           label = paste0("Species \n ", 
+                          format(df_shared_perc$species, digits = 2), 
+                          "%")) +
+  labs(title = "Leaf N:P")
+
+gg_np
+```
+
+### Combined plot
+
+```{r}
+cowplot::plot_grid(gg_n, gg_p, gg_np, ncol = 3)
+ggsave(paste0(here::here(), "/fig/venn.pdf"), width = 10, height = 3)
 ```
