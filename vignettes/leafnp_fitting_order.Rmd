@@ -297,14 +297,14 @@ gg_n <- ggplot(df_venn,
   coord_fixed() +
   scale_fill_manual(values=c("#29a274ff", "#777055ff")) +
   theme_void() +
-  annotate("text", x = -10 , y = 0, label = paste0("Site \n ", 
+  annotate("text", x = -8 , y = 0, label = paste0("Site \n ", 
                           format(df_shared_perc$site, digits = 2), 
                           "%")) +
   annotate("text", x = 3 , y = 0, 
            label = paste0("Shared \n ", 
                           format(df_shared_perc$shared_a, digits = 2), 
                           "%")) +
-  annotate("text", x = 21 , y = 0, 
+  annotate("text", x = 17 , y = 0, 
            label = paste0("Species \n ", 
                           format(df_shared_perc$species, digits = 2), 
                           "%")) +
@@ -406,14 +406,14 @@ gg_p <- ggplot(df_venn,
   coord_fixed() +
   scale_fill_manual(values=c("#29a274ff", "#777055ff")) +
   theme_void() +
-  annotate("text", x = -12.5 , y = 0, label = paste0("Site \n ", 
+  annotate("text", x = -15 , y = 0, label = paste0("Site \n ", 
                           format(df_shared_perc$site, digits = 2), 
                           "%")) +
   annotate("text", x = 3 , y = 0, 
            label = paste0("Shared \n ", 
                           format(df_shared_perc$shared_a, digits = 2), 
                           "%")) +
-  annotate("text", x = 21.5 , y = 0, 
+  annotate("text", x = 24 , y = 0, 
            label = paste0("Species \n ", 
                           format(df_shared_perc$species, digits = 2), 
                           "%")) +
