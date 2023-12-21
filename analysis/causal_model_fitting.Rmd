@@ -1,0 +1,161 @@
+---
+title: "Causal NP analysis"
+author: "Pepa Aran"
+date: "2023-06-22"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(ranger)
+library(caret)
+library(visdat)
+library(vip)
+library(pdp)
+library(nnet)
+library(recipes)
+library(knitr)
+library(forcats)
+library(cowplot)
+
+library(bestNormalize)
+library(metafor)
+library(nlme)
+# library(lme4)
+library(lmerTest)
+library(effects)
+library(ggeffects)
+library(MuMIn) # This is the same as Sardan's 2020,output r^2 of the model
+library(glmm.hp) # to get specific r^2
+library(performance)
+
+df_model_fitting <- tibble()
+overwrite <- FALSE
+```
+
+## Full data
+
+### Read data - copied from modelfitting.Rmd
+
+Read full species-level data
+```{r}
+df <- read_csv("~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/leafnp_data_covariates_20210702.csv") %>% 
+  mutate(grass = tree_shrub_Herb == "H")  
+```
+
+Define predictor sets.
+```{r}
+trgts <- c("leafN", "leafP", "LeafNP")
+
+## predictors excluding PHO, and TS (too many missing)
+preds <- c("elv", "mat", "matgs", "tmonthmin", "tmonthmax", "ndaysgs", "mai", "maigs", "map", "pmonthmin", "mapgs", "mavgs", "mav", "alpha", "vcmax25", "jmax25", "gs_accl", "aet", "ai", "cwdx80", "gti", "ndep", "co2", "T_BULK_DENSITY", "AWC_CLASS", "T_CLAY", "T_SILT", "T_SAND", "T_GRAVEL", "T_PH_H2O", "T_TEB", "T_BS", "T_CEC_SOIL", "T_CEC_CLAY", "T_ECE", "T_ESP", "T_CACO3", "T_OC", "ORGC", "TOTN", "CNrt", "ALSA", "PBR", "TP", "TK")
+
+preds_soil <- c("gti", "ndep", "T_BULK_DENSITY", "AWC_CLASS", "T_CLAY", "T_SILT", "T_SAND", "T_GRAVEL", "T_PH_H2O", "T_TEB", "T_BS", "T_CEC_SOIL", "T_CEC_CLAY", "T_ECE", "T_ESP", "T_CACO3", "T_OC", "ORGC", "TOTN", "CNrt", "ALSA", "PBR", "TP", "TK")
+  
+preds_climate <- c( "elv", "co2", "mat", "matgs", "tmonthmin", "tmonthmax", "ndaysgs", "mai", "maigs", "map", "pmonthmin", "mapgs", "mavgs", "mav", "alpha", "vcmax25", "jmax25", "gs_accl", "aet", "ai", "cwdx80")
+
+preds_pmodeloutputs <- c("vcmax25", "jmax25", "gs_accl")
+
+preds_pmodelinputs <- c("mat", "matgs", "mai", "maigs", "mav", "mavgs", "elv", "co2")
+```
+
+Filter to use only data from species that were recorded in at least five different sites.
+```{r}
+# yields 398 species
+use_species <- df %>% 
+  dplyr::select(sitename, Species) %>% 
+  distinct() %>% 
+  group_by(Species) %>% 
+  summarise(n = n()) %>% 
+  dplyr::filter(n >= 5) %>% 
+  pull(Species)
+
+df <- df %>% 
+  filter(Species %in% use_species)
+```
+
+Prepare date for linear mixed effects modelling. Do data pre-processing as Di Tian implemented it. Transformations are required, but not for Random Forest modelling. Therefore, define separate data objects for the two model types.
+
+Make factors and numeric. No capping to positive numbers done here (as opposed to Di Tian's).
+```{r}
+df_lmm <- df %>%
+  # drop_na() %>%
+  rename( 
+    SP = Species, 
+    FG = FunGroups, 
+    TG = tree_shrub_Herb, 
+    FGID = Dc_Db_Ec_Eb_Hf_Hg,
+    FA = Family, 
+    GE = Genus, 
+    ID = id
+    ) %>%
+  mutate(across(all_of(c("sitename", "FG", "FGID", "TG", "FA", "GE", "SP", "ID")), factor)) %>%
+  mutate(across(all_of(preds), as.numeric))
+```
+
+### Data exploration
+
+```{r eval = FALSE, echo = FALSE}
+# Install necessary packages
+install.packages("BiocManager")
+BiocManager::install("graph")    # this package is no longer hosted in CRAN
+BiocManager::install("RBGL")
+install.packages("pcalg")
+```
+
+There are 6,931 different locations were data was collected, but 7013 different site names.
+We can use the site locations as a proxy for the different "causal environments", just
+as an example for how to run the model. If we used the site name, there wouldn't
+be enough data per site to run the ICP.
+
+```{r}
+df_lmm_env <- df_lmm |>
+  drop_na() |>
+  group_by(lon, lat) |>
+  reframe(env = row_number()) |>
+  right_join(df_lmm)
+
+df_lmm_env
+```
+
+Let's now try to run the invariant causal prediction model.
+```{r}
+predictors <- c("FG", "TG", "elv", "lon", "lat", "FA", "GE", "SP", 
+                "mat", "matgs", "tmonthmin", "tmonthmax", "ndaysgs", "mai", "maigs",
+                "map", "pmonthmin", "mapgs", "mavgs", "mav", "alpha", "vcmax25",
+                "jmax25", "gs_accl", "aet", "ai", "cwdx80", "gti", "ndep", "co2",
+                "T_BULK_DENSITY", "AWC_CLASS", "T_CLAY", "T_SILT", "T_SAND", "T_GRAVEL",
+                "T_PH_H2O", "T_TEB", "T_BS", "T_CEC_SOIL", "T_CEC_CLAY", "T_ECE",
+                "T_ESP", "T_CACO3", "T_OC", "ORGC", "TOTN", "CNrt", "ALSA", "PBR",
+                "TP", "TK", "grass")
+
+model_icp <- ICP(X = df_lmm_env[, predictors], Y = df_lmm_env$leafN, ExpInd = df_lmm_env$env,
+    selection = "lasso", showAcceptedSets = TRUE, showCompletion = TRUE)
+```
+
+Since the model above does not work because we don't have enough observations, maybe we can try it with just the "shortlisted" variables selected by Beni and Di Tian.
+```{r}
+shorlist <- c("pmonthmin", "AWC_CLASS", "gs_accl", "alpha", "PBR", "co2", "ai", "tmonthmin", "ndep")
+
+model_icp <- ICP(X = df_lmm_env[, shortlist], Y = df_lmm_env$leafN, ExpInd = df_lmm_env$env,
+    selection = "lasso", showAcceptedSets = TRUE, showCompletion = TRUE)
+```
+
+Well, now it doesn't run either... let's try with a causal discovery algorithm. The PC-MCI algorithm used for categorical and continuous variables.
+```{r}
+library(pcalg)
+# Select few representative variables
+shortlist <- c("pmonthmin", "AWC_CLASS", "gs_accl", "alpha", "PBR", "co2",
+              "ai", "tmonthmin", "ndep")
+data <- df_lmm[, c("leafN", shortlist)] |>
+  drop_na()
+
+pc.fit <- pc(suffStat = list(C = cor(data), n = nrow(data)),
+             indepTest = gaussCItest, labels=names(data), 
+             alpha=0.01, verbose = TRUE)
+
+summary(pc.fit)
+plot(pc.fit@graph, y = "dot")
+```
+
