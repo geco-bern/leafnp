@@ -1,0 +1,358 @@
+---
+title: "Trait gradient hypotheses"
+description-title: "=Supplementary Material to article: Balancing the power of environment versus phylogenetic controls on leaf nitrogen and phosphorous concentrations of terrestrial plants"
+author: "Di Tian and Benjamin Stocker"
+date: "2024-02-14"
+output: html_document
+---
+
+## Biogeochemical Niche Hypothesis
+
+The data-generating process is modeled following the Biogeochemical Niche Hypothesis as follows. A trait's value $x$ of observation $i$, of species $k$, at site $s$ is assumed to be exclusively determined by the identity of that species. All observed values of species $k$ are equal to that species' mean plus an observational error $\varepsilon_i$.
+
+$$
+x_{i,k,s} = \overline{x_k} + \varepsilon_i
+$$
+An environmental filtering on species occurrence is modeled as a random draw (sample with replacement) of $N_s$ individuals for each site from the population $N_k$ species. The probability to draw a species $k$ at site $s$ depends on the site and is modeled using a functional form as shown in @fig-prob. The "narrowness" of the the species distribution across different sites is controlled by a parameter $k$ (`param_species_selection`). 
+```{r warning=FALSE, message=FALSE}
+#| code-fold: true
+#| label: fig-prob
+#| fig-cap: "Probability for the occurrence of a given species at a given site."
+#| out-width: 80%
+
+library(dplyr)
+library(purrr)
+library(tidyr)
+library(ggplot2)
+library(cowplot)
+library(here)
+
+get_prob <- function(
+    isite, 
+    nsites, 
+    nspecies, 
+    param_species_selection
+    ){
+  # preferred species at this site
+  use_species <- min(max(floor(isite/nsites * nspecies), 1), nspecies)
+  
+  # get probabilities
+  prob <- (abs((1:nspecies) - use_species) + 1)^param_species_selection
+
+  return(prob)
+}
+
+nspecies <- 50
+
+gg1 <- tibble(
+  species = 1:nspecies,
+  prob = get_prob(isite = 30, 
+                  nsites = 100, 
+                  nspecies = 50, 
+                  param_species_selection = -2) 
+) |> 
+  ggplot(aes(species, prob)) +
+  geom_point() +
+  theme_classic() +
+  labs(title = "Site number 30",
+       x = "Species number",
+       y = "Probability")
+
+gg2 <- tibble(
+  species = 1:nspecies,
+  prob = get_prob(isite = 60, 
+                  nsites = 100, 
+                  nspecies = 50, 
+                  param_species_selection = -2) 
+) |> 
+  ggplot(aes(species, prob)) +
+  geom_point() +
+  theme_classic() +
+  labs(title = "Site number 60",
+       x = "Species number",
+       y = "Probability")
+
+plot_grid(gg1, gg2)
+```
+
+The resulting trait gradient analysis (TGA) is shown in @fig-bgn. It demonstrates that the TGA identifies a data generating process following the Biogeochemical Niche Hypothesis by yielding  within-species regressions with a slope of zero.
+
+```{r warning=FALSE, message=FALSE}
+#| code-fold: true
+#| label: fig-bgn
+#| fig-cap: "Trait gradient analysis for data generated assuming the Biogeochemical Niche Hypothesis. Solid lines represent the species-specific regressions of trait values observed at different sites vs. the respective site mean across all species growing at that site."
+#| out-width: 80%
+
+nsites <- 100
+nspecies <- 50
+nobs_per_site <- 5
+error <- 0
+param_species_selection <- -2
+
+set.seed(2)
+df <- tibble()
+idx <- 0
+for (isite in 1:nsites){
+
+  prob <- get_prob(isite, nsites, nspecies, param_species_selection)
+    
+  for (iobs in 1:nobs_per_site){
+    idx <- idx + 1
+    df <- bind_rows(
+      df,
+      tibble(
+        idx = idx,
+        site = isite,
+        # At each site, species are randomly drawn from all available species 
+        # with an uneven probability per species, proportional to 
+        # [abs(species_index - preferred_species) + 1]^-2
+        species = sample(1:nspecies, 
+                         1, 
+                         replace = TRUE, 
+                         prob = prob
+                         )
+      ) |> 
+        mutate(value = rnorm(1, mean = species, sd = error) )
+    )
+  }
+}
+
+df <- df |> 
+  group_by(site) |> 
+  summarise(sitemean = mean(value)) |> 
+  right_join(
+    df,
+    by = "site"
+  )
+
+gg1 <- ggplot(data = df,
+       aes(x = sitemean, y = value, group = species)) + 
+  geom_smooth(method = "lm", 
+              se = FALSE, 
+              color = "black", 
+              linewidth = 0.5) + 
+  geom_point(color = "black", alpha = 0.4) +
+  geom_abline(intercept = 0, 
+              slope = 1, 
+              linetype = "dotted", color = "red") +
+  theme_classic() +
+  labs(
+    x = expression(paste("Site mean ", italic(x))),
+    y = expression(paste("Observation ", italic(x))),
+    title = "Biogeochemical Niche Hypothesis"
+  )
+
+gg1
+```
+```{r}
+#| code-fold: true
+#| label: fig-bgn-slopes
+#| fig-cap: "Distribution of slopes in the trait gradient analysis for data generated assuming the Biogeochemical Niche Hypothesis."
+#| out-width: 80%
+
+df_tga <- df |> 
+  group_by(species) |> 
+  nest() |> 
+  mutate(linmod = map(data, 
+                      ~lm(value  ~ sitemean,  
+                          data = ., 
+                          x = TRUE))) |> 
+  mutate(slope = map_dbl(linmod,  
+                         ~coef(.)[2]))
+
+gg2 <- df_tga |> 
+  ggplot(aes(slope, after_stat(density))) + 
+  geom_density( fill = "grey") +
+  theme_classic() + 
+  geom_vline(xintercept = 1.0, linetype = "dotted") + 
+  geom_vline(xintercept = 0.0, linetype = "dotted") + 
+  xlim(-0.5, 1.5) +
+  labs(x = "Slope")
+
+gg2
+```
+
+
+## Perfect stoichiometric plasticity
+
+The data-generating process is modeled following perfect stoichiometric plasticit as follows. Species occur randomly across sites and the site's environmental condition imprints a common effect on all species growing at the site - a site-specific mean value $\overline{x}_x$. Species are characterized by a random offset ($\delta_k \sim N(0, \sigma)$) of the leaf trait relative to the mean across all species growing at site $s$. $\varepsilon_i$ is an observational error.
+
+$$
+x_{i,k,s} = \overline{x}_s + \delta_k + \varepsilon_i
+$$
+An environmental filtering on species occurrence is modeled as above, but with a slightly wider niche (larger `param_species_selection`).
+
+```{r warning=FALSE, message=FALSE}
+#| code-fold: true
+#| label: fig-prob_psp
+#| fig-cap: "Probability for the occurrence of a given species at a given site. A wider niche is assumed here."
+#| out-width: 80%
+
+library(dplyr)
+library(purrr)
+library(tidyr)
+library(ggplot2)
+library(cowplot)
+library(here)
+
+get_prob <- function(
+    isite, 
+    nsites, 
+    nspecies, 
+    param_species_selection
+    ){
+  # preferred species at this site
+  use_species <- min(max(floor(isite/nsites * nspecies), 1), nspecies)
+  
+  # get probabilities
+  prob <- (abs((1:nspecies) - use_species) + 1)^param_species_selection
+
+  return(prob)
+}
+
+nspecies <- 50
+
+gg1a <- tibble(
+  species = 1:nspecies,
+  prob = get_prob(isite = 30, 
+                  nsites = 100, 
+                  nspecies = 50, 
+                  param_species_selection = -1) 
+) |> 
+  ggplot(aes(species, prob)) +
+  geom_point() +
+  theme_classic() +
+  labs(title = "Site number 30",
+       x = "Species number",
+       y = "Probability")
+
+gg2a <- tibble(
+  species = 1:nspecies,
+  prob = get_prob(isite = 60, 
+                  nsites = 100, 
+                  nspecies = 50, 
+                  param_species_selection = -1) 
+) |> 
+  ggplot(aes(species, prob)) +
+  geom_point() +
+  theme_classic() +
+  labs(title = "Site number 60",
+       x = "Species number",
+       y = "Probability")
+
+plot_grid(gg1a, gg2a)
+```
+
+The resulting trait gradient analysis (TGA) is shown in @fig-psp. It demonstrates that the TGA identifies a data generating process following perfect stoichiometric plasticity by yielding  within-species regressions with a distribution of slopes that has a peak at one.
+
+```{r warning=FALSE, message=FALSE}
+#| code-fold: true
+#| label: fig-psp
+#| fig-cap: "Trait gradient analysis for data generated assuming perfect stoichiometric plasticity. Solid lines represent the species-specific regressions of trait values observed at different sites vs. the respective site mean across all species growing at that site."
+#| out-width: 80%
+
+nsites <- 100
+nspecies <- 50
+nobs_per_site <- 5
+error <- 0
+sd_species <- 15
+param_species_selection <- -1
+
+# generate the random offset per species
+delta_species <- rnorm(nspecies, mean = 0, sd = sd_species)
+
+set.seed(2)
+df2 <- tibble()
+idx <- 0
+for (isite in 1:nsites){
+
+  prob <- get_prob(isite, nsites, nspecies, param_species_selection)
+
+  for (iobs in 1:nobs_per_site){
+    idx <- idx + 1
+    df2 <- bind_rows(
+      df2,
+      tibble(
+        idx = idx,
+        site = isite,
+        # At each site, species are randomly drawn from all available species 
+        # with an uneven probability per species, proportional to 
+        # [abs(species_index - preferred_species) + 1]^-2
+        species = sample(1:nspecies, 
+                         1, 
+                         replace = TRUE, 
+                         prob = prob
+                         )) |> 
+        # site mean value taken equal to isite
+        mutate(value = rnorm(1, mean = isite + delta_species[species], sd = error) )
+    )
+  }
+}
+
+df2 <- df2 |> 
+  group_by(site) |> 
+  summarise(sitemean = mean(value)) |> 
+  right_join(
+    df2,
+    by = "site"
+  )
+
+gg3 <- ggplot(data = df2,
+       aes(x = sitemean, y = value, group = species)) + 
+  geom_smooth(method = "lm", 
+              se = FALSE, 
+              color = "black", 
+              linewidth = 0.5) + 
+  geom_point(color = "black", alpha = 0.4) +
+  geom_abline(intercept = 0, 
+              slope = 1, 
+              linetype = "dotted", color = "red") +
+  theme_classic() +
+  labs(
+    x = expression(paste("Site mean ", italic(x))),
+    y = expression(paste("Observation ", italic(x))),
+    title = "Perfect stoichiometric plasticity"
+  )
+
+gg3
+```
+
+```{r}
+#| code-fold: true
+#| label: fig-psp-slopes
+#| fig-cap: "Distribution of slopes in the trait gradient analysis for data generated assuming the perfect stoichiometric plasticity."
+#| out-width: 80%
+
+df_tga2 <- df2 |> 
+  group_by(species) |> 
+  nest() |> 
+  mutate(linmod = map(data, 
+                      ~lm(value  ~ sitemean,  
+                          data = ., 
+                          x = TRUE))) |> 
+  mutate(slope = map_dbl(linmod,  
+                         ~coef(.)[2]))
+
+gg4 <- df_tga2 |> 
+  ggplot(aes(slope, after_stat(density))) + 
+  geom_density( fill = "grey") +
+  theme_classic() + 
+  geom_vline(xintercept = 1.0, linetype = "dotted") + 
+  geom_vline(xintercept = 0.0, linetype = "dotted") + 
+  xlim(-0.5, 1.5) +
+  labs(x = "Slope")
+
+gg4
+```
+
+## Publication figure
+
+```{r}
+plot_grid(gg1, gg3, ncol = 2)
+ggsave(here("fig/tga_demo.pdf"), width = 8, height = 4)
+ggsave(here("fig/tga_demo.png"), width = 8, height = 4)
+
+plot_grid(gg1, gg3, gg2, gg4, nrow = 2, rel_heights = c(1, 0.7))
+ggsave(here("fig/tga_demo_slopes.pdf"), width = 8, height = 6)
+ggsave(here("fig/tga_demo_slopes.png"), width = 8, height = 6)
+```
