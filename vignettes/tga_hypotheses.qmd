@@ -1,9 +1,13 @@
 ---
 title: "Trait gradient hypotheses"
-description-title: "=Supplementary Material to article: Balancing the power of environment versus phylogenetic controls on leaf nitrogen and phosphorous concentrations of terrestrial plants"
+description-title: "Supplementary Material to article: Balancing the power of environment versus phylogenetic controls on leaf nitrogen and phosphorous concentrations of terrestrial plants"
 author: "Di Tian and Benjamin Stocker"
 date: "2024-02-14"
-output: html_document
+format:
+  pdf:
+    toc: false
+    number-sections: false
+    colorlinks: true
 ---
 
 ## Biogeochemical Niche Hypothesis
@@ -14,7 +18,7 @@ $$
 x_{i,k,s} = \overline{x_k} + \varepsilon_i
 $$
 An environmental filtering on species occurrence is modeled as a random draw (sample with replacement) of $N_s$ individuals for each site from the population $N_k$ species. The probability to draw a species $k$ at site $s$ depends on the site and is modeled using a functional form as shown in @fig-prob. The "narrowness" of the the species distribution across different sites is controlled by a parameter $k$ (`param_species_selection`). 
-```{r warning=FALSE, message=FALSE}
+```{r warning=FALSE, message=FALSE, echo=FALSE}
 #| code-fold: true
 #| label: fig-prob
 #| fig-cap: "Probability for the occurrence of a given species at a given site."
@@ -77,7 +81,7 @@ plot_grid(gg1, gg2)
 
 The resulting trait gradient analysis (TGA) is shown in @fig-bgn. It demonstrates that the TGA identifies a data generating process following the Biogeochemical Niche Hypothesis by yielding  within-species regressions with a slope of zero.
 
-```{r warning=FALSE, message=FALSE}
+```{r warning=FALSE, message=FALSE, echo=FALSE}
 #| code-fold: true
 #| label: fig-bgn
 #| fig-cap: "Trait gradient analysis for data generated assuming the Biogeochemical Niche Hypothesis. Solid lines represent the species-specific regressions of trait values observed at different sites vs. the respective site mean across all species growing at that site."
@@ -144,7 +148,8 @@ gg1 <- ggplot(data = df,
 
 gg1
 ```
-```{r}
+
+```{r, echo=FALSE}
 #| code-fold: true
 #| label: fig-bgn-slopes
 #| fig-cap: "Distribution of slopes in the trait gradient analysis for data generated assuming the Biogeochemical Niche Hypothesis."
@@ -180,9 +185,9 @@ The data-generating process is modeled following perfect stoichiometric plastici
 $$
 x_{i,k,s} = \overline{x}_s + \delta_k + \varepsilon_i
 $$
-An environmental filtering on species occurrence is modeled as above, but with a slightly wider niche (larger `param_species_selection`).
+An environmental filtering on species occurrence is modeled as above, but with a slightly wider niche (smaller `param_species_selection`).
 
-```{r warning=FALSE, message=FALSE}
+```{r warning=FALSE, message=FALSE, echo=FALSE}
 #| code-fold: true
 #| label: fig-prob_psp
 #| fig-cap: "Probability for the occurrence of a given species at a given site. A wider niche is assumed here."
@@ -245,7 +250,7 @@ plot_grid(gg1a, gg2a)
 
 The resulting trait gradient analysis (TGA) is shown in @fig-psp. It demonstrates that the TGA identifies a data generating process following perfect stoichiometric plasticity by yielding  within-species regressions with a distribution of slopes that has a peak at one.
 
-```{r warning=FALSE, message=FALSE}
+```{r warning=FALSE, message=FALSE, echo=FALSE}
 #| code-fold: true
 #| label: fig-psp
 #| fig-cap: "Trait gradient analysis for data generated assuming perfect stoichiometric plasticity. Solid lines represent the species-specific regressions of trait values observed at different sites vs. the respective site mean across all species growing at that site."
@@ -317,7 +322,7 @@ gg3 <- ggplot(data = df2,
 gg3
 ```
 
-```{r}
+```{r, echo=FALSE}
 #| code-fold: true
 #| label: fig-psp-slopes
 #| fig-cap: "Distribution of slopes in the trait gradient analysis for data generated assuming the perfect stoichiometric plasticity."
@@ -347,7 +352,7 @@ gg4
 
 ## Publication figure
 
-```{r}
+```{r, echo=FALSE}
 plot_grid(gg1, gg3, ncol = 2)
 ggsave(here("fig/tga_demo.pdf"), width = 8, height = 4)
 ggsave(here("fig/tga_demo.png"), width = 8, height = 4)

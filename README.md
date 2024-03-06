@@ -7,7 +7,7 @@ The main directory contains analysis files, while the plots subdirectory contain
 Order of execution (all in subdirectory `./vignettes/`):
 
 1. Collect data: `vignettes/leafnp.Rmd`
-2. Feature elimination: `src/submit_feature_elimination_leafnp.sh` and `analysis/feature_elimination_leafnp.R`.
+2. Feature elimination: `src/submit_feature_elimination_leafnp.sh` and `analysis/feature_elimination_leafnp.R`. (t-values from LMMs in `vignettes/model_fitting.Rmd`)
 3. Model fitting: `vignettes/model_fitting.Rmd`
 4. Trait gradient analysis: `vignettes/traitgradient.Rmd`
 

@@ -117,7 +117,9 @@ shortlist <- readRDS(paste0(here::here(), "/data/shortlist_", target, ".rds"))
 ```{r}
 mod_lmm_leafn <- lme(
 
-  as.formula(paste("log(", target,") ~ ", paste(shortlist, collapse = " + "))),
+  # scaling predictors
+  as.formula("log(leafN) ~ scale(ALSA) + scale(mav) + scale(elv) + scale(co2) + scale(tmonthmin) + scale(mai) + scale(ndep)"),
+  # as.formula(paste("log(", target,") ~ ", paste(shortlist, collapse = " + "))),
   random = ~1|SP,
   data = dplyr::select(df_lmm, leafN, all_of(c(shortlist, "SP"))) %>% drop_na()
 
@@ -322,7 +324,8 @@ shortlist <- readRDS(paste0(here::here(), "/data/shortlist_", target, ".rds"))
 ```{r}
 mod_lmm_leafp <- lme(
 
-  as.formula(paste("log(", target,") ~ ", paste(shortlist, collapse = " + "))),
+  as.formula("log(leafP) ~ scale(pmonthmin) + scale(AWC_CLASS) + scale(gs_accl) + scale(alpha) + scale(PBR) + scale(co2) + scale(ai) + scale(tmonthmin) + scale(ndep)"),
+  # as.formula(paste("log(", target,") ~ ", paste(shortlist, collapse = " + "))),
   random = ~1|SP,
   data = dplyr::select(df_lmm, leafP, all_of(c(shortlist, "SP"))) %>% 
     drop_na()
@@ -533,7 +536,8 @@ shortlist <- readRDS(paste0(here::here(), "/data/shortlist_", target, ".rds"))
 ```{r}
 mod_lmm_leafnp <- lme(
 
-  as.formula(paste("log(", target,") ~ ", paste(shortlist, collapse = " + "))),
+  as.formula("log(LeafNP) ~ scale(map) + scale(ndep) + scale(cwdx80) + scale(elv) + scale(TP) + scale(tmonthmin) + scale(mai) + scale(mapgs) + scale(co2)"),
+  # as.formula(paste("log(", target,") ~ ", paste(shortlist, collapse = " + "))),
   random = ~1|SP,
   data = dplyr::select(df_lmm, LeafNP, all_of(c(shortlist, "SP"))) %>% drop_na()
 
@@ -1996,53 +2000,67 @@ ggsave(paste0(here::here(), "/fig/bars_model_fitting.pdf"), width = 9, height = 
 ### Effects
 
 ```{r}
+library(stringr)
+
 df_t_n <- tibble(
-  pred = names(summary(mod_lmm_leafn)$tTable[,"t-value"]),
+  pred = str_remove(
+    str_remove(
+      str_remove(names(summary(mod_lmm_leafn)$coefficients$fixed), "scale\\("),
+      "\\)"),
+    "\\("),
+  coef = summary(mod_lmm_leafn)$coefficients$fixed,
   tval = summary(mod_lmm_leafn)$tTable[,"t-value"],
   pval = summary(mod_lmm_leafn)$tTable[,"p-value"]
   ) |> 
-  filter(pred != "(Intercept)") |> 
-  filter(pval < 0.01)
+  filter(pred != "Intercept")
 
 df_t_p <- tibble(
-  pred = names(summary(mod_lmm_leafp)$tTable[,"t-value"]),
+  pred = str_remove(
+    str_remove(
+      str_remove(names(summary(mod_lmm_leafp)$coefficients$fixed), "scale\\("),
+      "\\)"),
+    "\\("),
+  coef = summary(mod_lmm_leafp)$coefficients$fixed,
   tval = summary(mod_lmm_leafp)$tTable[,"t-value"],
   pval = summary(mod_lmm_leafp)$tTable[,"p-value"]
   ) |> 
-  filter(pred != "(Intercept)") |> 
-  filter(pval < 0.01)
+  filter(pred != "Intercept")
 
 df_t_np <- tibble(
-  pred = names(summary(mod_lmm_leafnp)$tTable[,"t-value"]),
+  pred = str_remove(
+    str_remove(
+      str_remove(names(summary(mod_lmm_leafnp)$coefficients$fixed), "scale\\("),
+      "\\)"),
+    "\\("),
+  coef = summary(mod_lmm_leafnp)$coefficients$fixed,
   tval = summary(mod_lmm_leafnp)$tTable[,"t-value"],
   pval = summary(mod_lmm_leafnp)$tTable[,"p-value"]
   ) |> 
-  filter(pred != "(Intercept)") |> 
-  filter(pval < 0.01)
+  filter(pred != "Intercept")
 ```
 
 ```{r}
 ggt1 <- df_t_n %>% 
-  mutate(pred = fct_reorder(pred, tval)) %>%
-  ggplot(aes(pred, tval)) +
+  mutate(pred = fct_reorder(pred, coef)) %>%
+  ggplot(aes(pred, coef)) +
   geom_bar(stat = "identity", fill = "#777055ff") +
-  labs(title = "Leaf N", x = "", y = expression(italic(t)-value)) +
+  labs(title = "Leaf N", x = "", y = "Coefficient in LMM") +
   coord_flip() +
   theme_classic()
 
 ggt2 <- df_t_p %>% 
-  mutate(pred = fct_reorder(pred, tval)) %>%
-  ggplot(aes(pred, tval)) +
+  mutate(pred = fct_reorder(pred, coef)) %>%
+  ggplot(aes(pred, coef)) +
   geom_bar(stat = "identity", fill = "#777055ff") +
-  labs(title = "Leaf P", x = "", y = expression(italic(t)-value)) +
+  labs(title = "Leaf P", x = "", y = "Coefficient in LMM") +
   coord_flip() +
   theme_classic()
 
 ggt3 <- df_t_np %>% 
-  mutate(pred = fct_reorder(pred, tval)) %>%
-  ggplot(aes(pred, tval)) +
+  mutate(pred = fct_reorder(pred, coef)) %>%
+  ggplot(aes(pred, coef)) +
   geom_bar(stat = "identity", fill = "#777055ff") +
-  labs(title = "Leaf N:P", x = "", y = expression(italic(t)-value)) +
+  labs(title = "Leaf N:P", x = "", y = "Coefficient in LMM") +
   coord_flip() +
   theme_classic()
 
