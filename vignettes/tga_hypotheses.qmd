@@ -353,9 +353,9 @@ gg4
 ## Publication figure
 
 ```{r, echo=FALSE}
-plot_grid(gg1, gg3, ncol = 2)
-ggsave(here("fig/tga_demo.pdf"), width = 8, height = 4)
-ggsave(here("fig/tga_demo.png"), width = 8, height = 4)
+# plot_grid(gg1, gg3, ncol = 2)
+# ggsave(here("fig/tga_demo.pdf"), width = 8, height = 4)
+# ggsave(here("fig/tga_demo.png"), width = 8, height = 4)
 
 plot_grid(gg1, gg3, gg2, gg4, nrow = 2, rel_heights = c(1, 0.7))
 ggsave(here("fig/tga_demo_slopes.pdf"), width = 8, height = 6)
