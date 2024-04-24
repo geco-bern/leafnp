@@ -17,15 +17,16 @@ library(nnet)
 library(recipes)
 library(knitr)
 library(forcats)
-# library(rbeni)
+library(cowplot)
+library(here)
 overwrite <- FALSE
 ```
 
 This looks at feature elimination results and makes the selection of the most important predictors for subsequent (final) model fitting (in other Rmd files).
 
-Obtain outputs from Euler, generated with `feature_elimination_leafnp.R`. Download CSV files into `data/`
+Obtain outputs from HPC, generated with `feature_elimination_leafnp.R`.
 
-Load data aggregated to sites, done in `randomforest_leafnp.Rmd`.
+Load data aggregated to sites, done in `vignettes/prepare_data.Rmd`.
 ```{r}
 dfs <- readRDS(paste0(here::here(), "/data/dfs_leafnp_20210729.rds"))
 ```
@@ -192,7 +193,7 @@ write_csv(df_cv, file = paste0(here::here(), "/data/df_cv_leafn.csv"))
 
 ### Full data
 
-Read full species-level data
+Read full species-level data. This is a local data file. Obtain it from external source (not in this repository).
 ```{r}
 # df <- read_csv("~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/soil_property_extraction_20210323/global_leaf_NP_with_soil_property_from_HWSD_WISE_GSDE_Pmodel_Ndep_GTI_CO2_25032021.csv") %>% 
 #   mutate(grass = tree_shrub_Herb == "H") 
@@ -902,7 +903,6 @@ write_csv(df_cv, file = paste0(here::here(), "/data/df_cv_leafnp.csv"))
 # Publication figures
 
 ```{r}
-library(cowplot)
 gg1 <- readRDS(paste0(here::here(), "/data/gg1.rds"))
 plot_grid(gg1, gg2, gg3, labels =  c("a", "b", "c"), ncol = 3)
 ggsave(paste0(here::here(), "/fig/modobs_all.pdf"), width = 12, height = 4)

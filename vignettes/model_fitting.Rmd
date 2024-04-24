@@ -18,7 +18,7 @@ library(recipes)
 library(knitr)
 library(forcats)
 library(cowplot)
-
+library(stringr)
 library(bestNormalize)
 library(metafor)
 library(nlme)
@@ -38,7 +38,7 @@ overwrite <- FALSE
 
 ### Read data
 
-Read full species-level data
+Read full species-level data. This is a local data file. Obtain it from external source (not in this repository).
 ```{r}
 df <- read_csv("~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/leafnp_data_covariates_20210702.csv") %>% 
   mutate(grass = tree_shrub_Herb == "H")  
@@ -2000,8 +2000,6 @@ ggsave(paste0(here::here(), "/fig/bars_model_fitting.pdf"), width = 9, height = 
 ### Effects
 
 ```{r}
-library(stringr)
-
 df_t_n <- tibble(
   pred = str_remove(
     str_remove(

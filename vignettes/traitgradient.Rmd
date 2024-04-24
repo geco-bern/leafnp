@@ -12,6 +12,9 @@ library(cowplot)
 ```
 
 ## Prepare data
+
+Read full species-level data. This is a local data file. Obtain it from external source (not in this repository).
+
 ```{r}
 df <- read_csv("~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/leafnp_data_covariates_20210702.csv") %>% 
   dplyr::select(leafN, leafP, LeafNP, Family, Genus, Species, sitename) |> 
@@ -22,14 +25,6 @@ df <- read_csv("~/data/LeafNP_tiandi/Global_total_leaf_N_P_Di/leafnp_data_covari
 
 Add logarithms
 ```{r}
-# Had it like this first:
-# df <- df %>% 
-#   mutate(log_leafN = log10(leafN), 
-#          log_leafP = log10(leafP),
-#          log_leafN_sitemean = log10(leafN_sitemean),
-#          log_leafP_sitemean = log10(leafP_sitemean)
-#          )
-
 df <- df %>%
   mutate(log_leafN  = log10(leafN),
          log_leafP  = log10(leafP),
@@ -353,7 +348,6 @@ df_tga <- df |>
   # remove outlier in slope P
   filter(slope_p > -5 & slope_p < 5 & range_p_norm > 0)
 ```
-
 
 Maximum density (mode) of the distribution of slopes.
 ```{r}
