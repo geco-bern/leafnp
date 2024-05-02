@@ -37,7 +37,8 @@ To reproduce the analysis, obtain the data file from above-mentioned source. The
 6. Linear mixed effects model fitting explorations
     - Code: `vignettes/leafnp_fitting_order.Rmd`
     - Outputs: a html document showing results of the explorations. Results were used in the discussion of the article Tian et al. (in review).
-    
+
+**Note:**  Published figures can be re-created directly using intermediate data objects stored in `data/data_published_figures`. 
 
 ## Repository structure
 
