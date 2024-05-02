@@ -1,0 +1,7 @@
+﻿.metric,.estimator,.estimate,var,type
+rsq_trad,standard,0.598278267,leafN,across
+rsq_trad,standard,0.401678268,leafN,within
+rsq_trad,standard,0.53219511,leafP,across
+rsq_trad,standard,0.466766694,leafP,within
+rsq_trad,standard,0.421878627,leafNP,across
+rsq_trad,standard,0.57273659,leafNP,within
